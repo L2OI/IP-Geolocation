@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --paper: #fafafa;
+      --ink: #111111;
+      --subtle: #4a4a4a;
+      --muted: #6f6f6f;
+      --line: #e5e5e5;
+      --line-strong: #cfcfcf;
+      --field: #f3f3f3;
+      --white: #ffffff;
+      --danger: #111111;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .06);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      width: 372px;
+      margin: 0;
+      padding: 22px;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: "Bahnschrift", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+      font-weight: 300;
+      line-height: 1.4;
+      letter-spacing: -.01em;
+    }
+
+    .masthead {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: end;
+      gap: 18px;
+      padding-bottom: 18px;
+      margin-bottom: 18px;
+      border-bottom: 1px solid var(--ink);
+    }
+
+    .brand {
+      font-size: 25px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -.05em;
+    }
+
+    .brand-note {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 300;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .section {
+      padding: 18px;
+      margin-bottom: 14px;
+      border: 1px solid var(--line);
+      border-radius: 2px;
+      background: var(--white);
+      box-shadow: var(--shadow);
+      transition: border-color .2s ease, background-color .2s ease;
+    }
+
+    .section:hover {
+      border-color: var(--line-strong);
+      background: #fdfdfd;
+    }
+
+    .section-title {
+      margin-bottom: 16px;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -.035em;
+    }
+
+    .proxy-grid {
+      display: grid;
+      grid-template-columns: 66px 1fr;
+      gap: 14px 16px;
+      align-items: center;
+      font-size: 14px;
+    }
+
+    .proxy-grid label {
+      color: var(--subtle);
+      font-weight: 300;
+    }
+
+    .proxy-grid input:not([type="checkbox"]),
+    .proxy-grid select {
+      width: 100%;
+      min-height: 38px;
+      padding: 8px 0;
+      border: 0;
+      border-bottom: 1px solid var(--line-strong);
+      border-radius: 0;
+      outline: none;
+      color: var(--ink);
+      background: transparent;
+      font: inherit;
+      font-weight: 300;
+      transition: border-color .2s ease, background-color .2s ease;
+    }
+
+    .proxy-grid input:not([type="checkbox"]):hover,
+    .proxy-grid select:hover {
+      border-bottom-color: var(--ink);
+      background: var(--field);
+    }
+
+    .proxy-grid input:not([type="checkbox"]):focus,
+    .proxy-grid select:focus {
+      border-bottom-color: var(--ink);
+      background: var(--field);
+      box-shadow: 0 1px 0 var(--ink);
+    }
+
+    .proxy-grid select option {
+      color: var(--ink);
+      background: var(--white);
+    }
+
+    .proxy-grid input[type="checkbox"] {
+      appearance: none;
+      width: 22px;
+      height: 22px;
+      margin: 0;
+      border: 1px solid var(--line-strong);
+      border-radius: 2px;
+      cursor: pointer;
+      background: var(--white);
+      box-shadow: var(--shadow);
+      position: relative;
+      transition: background-color .2s ease, border-color .2s ease, opacity .2s ease;
+    }
+
+    .proxy-grid input[type="checkbox"]::after {
+      content: "";
+      position: absolute;
+      left: 6px;
+      top: 2px;
+      width: 6px;
+      height: 12px;
+      border: solid var(--white);
+      border-width: 0 2px 2px 0;
+      opacity: 0;
+      transform: rotate(45deg);
+    }
+
+    .proxy-grid input[type="checkbox"]:checked {
+      border-color: var(--ink);
+      background: var(--ink);
+    }
+
+    .proxy-grid input[type="checkbox"]:checked::after {
+      opacity: 1;
+    }
+
+    .proxy-grid input[type="checkbox"]:focus-visible {
+      outline: 1px solid var(--ink);
+      outline-offset: 3px;
+    }
+
+    .proxy-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    #proxy-status,
+    #language-status {
+      margin-top: 14px;
+      padding: 11px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 300;
+      word-break: break-all;
+      border-top: 1px solid var(--line);
+    }
+
+    iframe {
+      width: 100%;
+      height: 192px;
+      margin: 2px 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 2px;
+      background: var(--white);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    #info-grid {
+      display: grid;
+      grid-template-columns: 66px 1fr;
+      gap: 9px 16px;
+      padding: 16px 0;
+      margin: 0 0 14px;
+      color: var(--ink);
+      font-size: 13px;
+      border-top: 1px solid var(--ink);
+      border-bottom: 1px solid var(--line);
+    }
+
+    #info-grid strong {
+      color: var(--subtle);
+      font-weight: 300;
+    }
+
+    #info-grid span {
+      font-weight: 600;
+    }
+
+    button {
+      width: 100%;
+      min-height: 40px;
+      padding: 10px 14px;
+      border: 1px solid var(--ink);
+      border-radius: 2px;
+      cursor: pointer;
+      color: var(--white);
+      background: var(--ink);
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      transition: color .2s ease, background-color .2s ease, border-color .2s ease, opacity .2s ease;
+    }
+
+    button:hover:not(:disabled) {
+      color: var(--ink);
+      background: var(--white);
+      border-color: var(--ink);
+    }
+
+    button:active:not(:disabled) {
+      opacity: .7;
+    }
+
+    button:focus-visible {
+      outline: 1px solid var(--ink);
+      outline-offset: 3px;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      color: var(--muted);
+      background: var(--field);
+      border-color: var(--line);
+      opacity: .8;
+    }
+
+    #disable-proxy-btn {
+      color: var(--ink);
+      background: var(--white);
+      border-color: var(--line-strong);
+    }
+
+    #disable-proxy-btn:hover:not(:disabled) {
+      color: var(--white);
+      background: var(--ink);
+      border-color: var(--ink);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand">IP定位</div>
+    <div class="brand-note">本地代理</div>
+  </header>
+
+  <div class="section">
+    <div class="section-title">代理配置</div>
+    <div class="proxy-grid">
+      <label for="proxy-enabled">启用</label>
+      <input id="proxy-enabled" type="checkbox">
+
+      <label for="proxy-scheme">协议</label>
+      <select id="proxy-scheme">
+        <option value="http" selected>HTTP / mixed</option>
+        <option value="https">HTTPS</option>
+        <option value="socks5">SOCKS5</option>
+        <option value="socks4">SOCKS4</option>
+      </select>
+
+      <label for="proxy-host">地址</label>
+      <input id="proxy-host" type="text" value="127.0.0.1" spellcheck="false">
+
+      <label for="proxy-port">端口</label>
+      <input id="proxy-port" type="number" min="1" max="65535" value="10808">
+
+      <label for="proxy-bypass">直连</label>
+      <input id="proxy-bypass" type="text" value="&lt;-loopback&gt;" spellcheck="false">
+    </div>
+    <div class="proxy-actions">
+      <button id="save-proxy-btn">保存启用</button>
+      <button id="disable-proxy-btn">关闭代理</button>
+    </div>
+    <div id="proxy-status">代理状态加载中...</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">语言伪装</div>
+    <div class="proxy-grid">
+      <label for="language-enabled">启用</label>
+      <input id="language-enabled" type="checkbox">
+
+      <label for="language-preset">语言</label>
+      <select id="language-preset">
+        <option value="en-US|en-US,en|en-US,en;q=0.9">English (US)</option>
+        <option value="en-GB|en-GB,en|en-GB,en;q=0.9">English (UK)</option>
+        <option value="zh-CN|zh-CN,zh,en|zh-CN,zh;q=0.9,en;q=0.8">中文 (简体)</option>
+        <option value="zh-TW|zh-TW,zh,en|zh-TW,zh;q=0.9,en;q=0.8">中文 (繁体)</option>
+        <option value="ja-JP|ja-JP,ja,en|ja-JP,ja;q=0.9,en;q=0.8">日本語</option>
+        <option value="ko-KR|ko-KR,ko,en|ko-KR,ko;q=0.9,en;q=0.8">한국어</option>
+        <option value="de-DE|de-DE,de,en|de-DE,de;q=0.9,en;q=0.8">Deutsch</option>
+        <option value="fr-FR|fr-FR,fr,en|fr-FR,fr;q=0.9,en;q=0.8">Français</option>
+      </select>
+    </div>
+    <button id="save-language-btn">保存语言</button>
+    <div id="language-status">语言状态加载中...</div>
+  </div>
+
+  <iframe id="map-frame" src="map.html"></iframe>
+  <div id="info-grid">
+    <strong>国家</strong> <span id="country">加载中...</span>
+    <strong>纬度</strong> <span id="latitude">加载中...</span>
+    <strong>经度</strong> <span id="longitude">加载中...</span>
+    <strong>更新于</strong> <span id="updateTime">加载中...</span>
+  </div>
+  <button id="refresh-btn">立即刷新</button>
+  <script src="popup.js"></script>
+</body>
+</html>
