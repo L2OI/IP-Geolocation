@@ -1,0 +1,161 @@
+{
+  "extName": {
+    "message": "IP定位与本地代理"
+  },
+  "extDescription": {
+    "message": "基于IP位置自动更新浏览器的GPS位置，并支持手动配置本地浏览器代理。"
+  },
+  "brandTitle": {
+    "message": "IP定位"
+  },
+  "brandNote": {
+    "message": "本地代理"
+  },
+  "proxySectionTitle": {
+    "message": "代理配置"
+  },
+  "masterSectionTitle": {
+    "message": "插件功能"
+  },
+  "masterEnableButton": {
+    "message": "启用"
+  },
+  "masterDisableButton": {
+    "message": "关闭"
+  },
+  "masterLoading": {
+    "message": "插件状态加载中..."
+  },
+  "masterEnabledStatus": {
+    "message": "插件功能已启用"
+  },
+  "masterDisabledStatus": {
+    "message": "插件功能已关闭，刷新当前网页后完全生效"
+  },
+  "masterReadFailed": {
+    "message": "读取插件状态失败"
+  },
+  "masterSaving": {
+    "message": "正在切换插件状态..."
+  },
+  "masterSaveFailed": {
+    "message": "切换失败"
+  },
+  "languageSectionTitle": {
+    "message": "语言伪装"
+  },
+  "webRtcSectionTitle": {
+    "message": "模式"
+  },
+  "webRtcStrictMode": {
+    "message": "严格模式"
+  },
+  "webRtcCompatibleMode": {
+    "message": "兼容模式"
+  },
+  "webRtcOffMode": {
+    "message": "关闭"
+  },
+  "labelEnabled": {
+    "message": "启用"
+  },
+  "labelScheme": {
+    "message": "协议"
+  },
+  "labelHost": {
+    "message": "地址"
+  },
+  "labelPort": {
+    "message": "端口"
+  },
+  "labelBypass": {
+    "message": "直连"
+  },
+  "labelLanguage": {
+    "message": "语言"
+  },
+  "proxyEnableButton": {
+    "message": "启用"
+  },
+  "proxyDisableButton": {
+    "message": "关闭"
+  },
+  "saveEnableButton": {
+    "message": "启用"
+  },
+  "disableProxyButton": {
+    "message": "关闭"
+  },
+  "saveLanguageButton": {
+    "message": "保存语言"
+  },
+  "refreshButton": {
+    "message": "立即刷新"
+  },
+  "refreshingButton": {
+    "message": "刷新中..."
+  },
+  "proxyLoading": {
+    "message": "代理状态加载中..."
+  },
+  "languageLoading": {
+    "message": "语言状态加载中..."
+  },
+  "fieldCountry": {
+    "message": "国家"
+  },
+  "fieldLatitude": {
+    "message": "纬度"
+  },
+  "fieldLongitude": {
+    "message": "经度"
+  },
+  "fieldUpdatedAt": {
+    "message": "更新于"
+  },
+  "loading": {
+    "message": "加载中..."
+  },
+  "noData": {
+    "message": "暂无数据"
+  },
+  "notAvailable": {
+    "message": "N/A"
+  },
+  "proxyEnabledPrefix": {
+    "message": "已启用"
+  },
+  "proxyDisabled": {
+    "message": "未启用代理"
+  },
+  "proxyReadFailed": {
+    "message": "读取代理配置失败"
+  },
+  "proxySaving": {
+    "message": "正在保存代理配置..."
+  },
+  "proxySaveFailed": {
+    "message": "保存失败"
+  },
+  "proxyDisabling": {
+    "message": "正在关闭代理..."
+  },
+  "proxyDisableFailed": {
+    "message": "关闭失败"
+  },
+  "languageEnabledPrefix": {
+    "message": "已启用"
+  },
+  "languageDisabled": {
+    "message": "未启用语言伪装"
+  },
+  "languageReadFailed": {
+    "message": "读取语言配置失败"
+  },
+  "languageSaving": {
+    "message": "正在保存语言配置..."
+  },
+  "unknownError": {
+    "message": "未知错误"
+  }
+}

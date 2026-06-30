@@ -4,6 +4,7 @@
 
   function applySpoof(payload) {
     if (!payload || !payload.latitude || !payload.longitude) return;
+    if (payload.extensionEnabled === false || payload.enabled === false) return;
 
     const latitude = Number(payload.latitude);
     const longitude = Number(payload.longitude);

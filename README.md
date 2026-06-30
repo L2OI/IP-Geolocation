@@ -1,10 +1,23 @@
-<p align="center">
-  <img src="./icon.png" width="96" alt="IP-Geolocation">
-</p>
+# IP Geolocation and Local Proxy
 
-<h1 align="center">IP-Geolocation</h1>
+A Chromium Manifest V3 extension for IP-based geolocation spoofing, local proxy switching, language spoofing, and WebRTC mode control.
 
+## Features
 
-可以通过指纹浏览器在线检测，避免语言，ip地址和代理地址不一致的情况，减少风控值，会对你的Chatgpt，Claude，Gemini生效
+- Local browser proxy switch with configurable scheme, host, port, and bypass list
+- Geolocation and timezone spoofing based on detected IP location
+- Language and `Accept-Language` spoofing
+- WebRTC privacy modes
+- Extension-level enable/disable switch
+- Chinese and English extension UI
 
-It can be detected through a fingerprint browser to avoid inconsistencies between the language, IP address, and proxy address, reducing the risk score. This will take effect for your ChatGPT, Claude, and Gemini.
+## Load unpacked
+
+1. Open `chrome://extensions/`.
+2. Enable Developer mode.
+3. Click **Load unpacked**.
+4. Select this folder.
+
+## Notes
+
+Build outputs, signing keys, browser profiles, capture files, and temporary files are intentionally excluded from this repository.

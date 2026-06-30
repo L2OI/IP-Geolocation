@@ -11,7 +11,12 @@ const FALLBACK_LOCATION = {
 };
 const PROXY_STORAGE_KEY = 'proxyConfig';
 const LANGUAGE_STORAGE_KEY = 'languageConfig';
+const WEBRTC_STORAGE_KEY = 'webRtcConfig';
+const EXTENSION_ENABLED_KEY = 'extensionEnabled';
 const LANGUAGE_RULE_ID = 1001;
+const MAIN_CONTENT_SCRIPT_ID = 'ipgeo-main-spoof';
+const BRIDGE_CONTENT_SCRIPT_ID = 'ipgeo-bridge';
+const CONTENT_SCRIPT_IDS = [MAIN_CONTENT_SCRIPT_ID, BRIDGE_CONTENT_SCRIPT_ID];
 const DEFAULT_PROXY_CONFIG = {
   enabled: false,
   scheme: 'http',
@@ -25,6 +30,14 @@ const DEFAULT_LANGUAGE_CONFIG = {
   languages: ['en-US', 'en'],
   acceptLanguage: 'en-US,en;q=0.9'
 };
+const DEFAULT_WEBRTC_CONFIG = {
+  globalMode: 'strict'
+};
+const WEBRTC_POLICY_VALUES = {
+  strict: 'disable_non_proxied_udp',
+  compatible: 'default_public_interface_only',
+  off: null
+};
 
 function chromeCall(fn, ...args) {
   return new Promise((resolve, reject) => {
@@ -34,6 +47,63 @@ function chromeCall(fn, ...args) {
       else resolve();
     });
   });
+}
+
+async function getExtensionEnabled() {
+  const data = await chrome.storage.local.get(EXTENSION_ENABLED_KEY);
+  return data[EXTENSION_ENABLED_KEY] !== false;
+}
+
+async function removeLanguageHeaderRules() {
+  if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateDynamicRules) return;
+  await chromeCall(chrome.declarativeNetRequest.updateDynamicRules.bind(chrome.declarativeNetRequest), {
+    removeRuleIds: [LANGUAGE_RULE_ID]
+  });
+}
+
+async function clearProxySettings() {
+  if (!chrome.proxy || !chrome.proxy.settings) return;
+  await chromeCall(chrome.proxy.settings.clear.bind(chrome.proxy.settings), {
+    scope: 'regular'
+  });
+}
+
+async function unregisterSpoofContentScripts() {
+  if (!chrome.scripting || !chrome.scripting.unregisterContentScripts) return;
+  try {
+    await chromeCall(chrome.scripting.unregisterContentScripts.bind(chrome.scripting), {
+      ids: CONTENT_SCRIPT_IDS
+    });
+  } catch (error) {
+    if (!/non[- ]?existent|not found|does not exist/i.test(error.message)) {
+      console.warn('Content script unregister failed:', error.message);
+    }
+  }
+}
+
+async function registerSpoofContentScripts() {
+  if (!chrome.scripting || !chrome.scripting.registerContentScripts) return;
+
+  await unregisterSpoofContentScripts();
+  await chromeCall(chrome.scripting.registerContentScripts.bind(chrome.scripting), [
+    {
+      id: MAIN_CONTENT_SCRIPT_ID,
+      matches: ['<all_urls>'],
+      js: ['main_spoof.js'],
+      runAt: 'document_start',
+      allFrames: true,
+      world: 'MAIN',
+      persistAcrossSessions: true
+    },
+    {
+      id: BRIDGE_CONTENT_SCRIPT_ID,
+      matches: ['<all_urls>'],
+      js: ['content.js'],
+      runAt: 'document_start',
+      allFrames: true,
+      persistAcrossSessions: true
+    }
+  ]);
 }
 
 function normalizeProxyConfig(config = {}) {
@@ -86,14 +156,14 @@ function normalizeLanguageConfig(config = {}) {
   };
 }
 
-async function applyLanguageHeaderRules(config) {
+async function applyLanguageHeaderRules(config, extensionEnabled = true) {
   const normalized = normalizeLanguageConfig(config);
   if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateDynamicRules) {
     return normalized;
   }
 
   const update = { removeRuleIds: [LANGUAGE_RULE_ID] };
-  if (normalized.enabled) {
+  if (extensionEnabled && normalized.enabled) {
     update.addRules = [{
       id: LANGUAGE_RULE_ID,
       priority: 1,
@@ -185,14 +255,24 @@ function buildChromeProxyValue(config) {
   };
 }
 
-async function setWebRtcLeakProtection(enabled) {
+function normalizeWebRtcConfig(config = {}) {
+  const globalMode = config.globalMode === 'off'
+    ? 'off'
+    : config.globalMode === 'compatible'
+      ? 'compatible'
+      : 'strict';
+
+  return { globalMode };
+}
+
+async function setWebRtcPolicyValue(value) {
   const setting = chrome.privacy && chrome.privacy.network && chrome.privacy.network.webRTCIPHandlingPolicy;
   if (!setting) return;
 
   try {
-    if (enabled) {
+    if (value) {
       await chromeCall(setting.set.bind(setting), {
-        value: 'disable_non_proxied_udp',
+        value,
         scope: 'regular'
       });
     } else {
@@ -203,11 +283,68 @@ async function setWebRtcLeakProtection(enabled) {
   }
 }
 
+async function getWebRtcConfig() {
+  const data = await chrome.storage.local.get(WEBRTC_STORAGE_KEY);
+  return normalizeWebRtcConfig(data[WEBRTC_STORAGE_KEY] || DEFAULT_WEBRTC_CONFIG);
+}
+
+async function getWebRtcState() {
+  const config = await getWebRtcConfig();
+  const effectivePolicy = WEBRTC_POLICY_VALUES[config.globalMode];
+
+  return {
+    config,
+    effectivePolicy
+  };
+}
+
+async function applyWebRtcSettings() {
+  const state = await getWebRtcState();
+  const extensionEnabled = await getExtensionEnabled();
+  if (!extensionEnabled) {
+    await setWebRtcPolicyValue(null);
+    return {
+      ...state,
+      effectivePolicy: null
+    };
+  }
+  await setWebRtcPolicyValue(state.effectivePolicy);
+  return state;
+}
+
+async function saveAndApplyWebRtcConfig(config) {
+  const normalized = normalizeWebRtcConfig(config);
+  await chrome.storage.local.set({ [WEBRTC_STORAGE_KEY]: normalized });
+  await applyWebRtcSettings();
+  return getWebRtcState();
+}
+
+async function setWebRtcGlobalMode(mode) {
+  const config = await getWebRtcConfig();
+  const globalMode = mode === 'off'
+    ? 'off'
+    : mode === 'compatible'
+      ? 'compatible'
+      : 'strict';
+
+  return saveAndApplyWebRtcConfig({
+    ...config,
+    globalMode
+  });
+}
+
 async function applyProxySettings(config) {
   const normalized = normalizeProxyConfig(config);
 
   if (!chrome.proxy || !chrome.proxy.settings) {
     throw new Error('chrome.proxy API is unavailable');
+  }
+
+  const extensionEnabled = await getExtensionEnabled();
+  if (!extensionEnabled) {
+    await clearProxySettings();
+    await setWebRtcPolicyValue(null);
+    return normalized;
   }
 
   if (normalized.enabled) {
@@ -221,7 +358,7 @@ async function applyProxySettings(config) {
     });
   }
 
-  await setWebRtcLeakProtection(normalized.enabled);
+  await applyWebRtcSettings();
   return normalized;
 }
 
@@ -251,7 +388,7 @@ async function getLanguageConfig() {
 async function saveAndApplyLanguageConfig(config) {
   const normalized = normalizeLanguageConfig(config);
   await chrome.storage.local.set({ [LANGUAGE_STORAGE_KEY]: normalized });
-  await applyLanguageHeaderRules(normalized);
+  await applyLanguageHeaderRules(normalized, await getExtensionEnabled());
   await updateAllTabs();
   return normalized;
 }
@@ -260,7 +397,7 @@ async function syncLanguageSettingsFromStorage() {
   const data = await chrome.storage.local.get(LANGUAGE_STORAGE_KEY);
   const normalized = normalizeLanguageConfig(data[LANGUAGE_STORAGE_KEY] || DEFAULT_LANGUAGE_CONFIG);
   await chrome.storage.local.set({ [LANGUAGE_STORAGE_KEY]: normalized });
-  await applyLanguageHeaderRules(normalized);
+  await applyLanguageHeaderRules(normalized, await getExtensionEnabled());
 }
 
 const spooferFunction = (latitude, longitude, timezone, timezoneOffset, languageConfig) => {
@@ -350,6 +487,8 @@ const spooferFunction = (latitude, longitude, timezone, timezoneOffset, language
 };
 
 async function injectScript(tabId) {
+  if (!(await getExtensionEnabled())) return;
+
   const { lastLocation, languageConfig } = await chrome.storage.local.get(['lastLocation', LANGUAGE_STORAGE_KEY]);
   const normalizedLanguage = normalizeLanguageConfig(languageConfig || DEFAULT_LANGUAGE_CONFIG);
   if (lastLocation && lastLocation.latitude && lastLocation.longitude) {
@@ -370,6 +509,8 @@ async function injectScript(tabId) {
 }
 
 async function updateAllTabs() {
+  if (!(await getExtensionEnabled())) return;
+
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
     if (tab.id) {
@@ -380,6 +521,10 @@ async function updateAllTabs() {
 
 async function updateGeolocation(forceUpdate = false) {
   try {
+    if (!(await getExtensionEnabled())) {
+      return { ok: false, disabled: true, error: 'extension disabled' };
+    }
+
     const { lastLocation: oldLocation } = await chrome.storage.local.get('lastLocation');
     let locationToSet;
     const errors = [];
@@ -427,6 +572,49 @@ async function updateGeolocation(forceUpdate = false) {
   }
 }
 
+async function clearRuntimeSideEffects() {
+  await unregisterSpoofContentScripts();
+  await removeLanguageHeaderRules();
+  await clearProxySettings();
+  await setWebRtcPolicyValue(null);
+}
+
+async function activateRuntimeSideEffects() {
+  await registerSpoofContentScripts();
+  await syncProxySettingsFromStorage();
+  await syncLanguageSettingsFromStorage();
+  await applyWebRtcSettings();
+  await updateGeolocation(true);
+  await updateAllTabs();
+}
+
+async function getExtensionState() {
+  return {
+    enabled: await getExtensionEnabled()
+  };
+}
+
+async function setExtensionEnabled(enabled) {
+  const normalized = Boolean(enabled);
+  await chrome.storage.local.set({ [EXTENSION_ENABLED_KEY]: normalized });
+
+  if (normalized) {
+    await activateRuntimeSideEffects();
+  } else {
+    await clearRuntimeSideEffects();
+  }
+
+  return getExtensionState();
+}
+
+async function initializeExtension() {
+  if (await getExtensionEnabled()) {
+    await activateRuntimeSideEffects();
+  } else {
+    await clearRuntimeSideEffects();
+  }
+}
+
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'loading') {
     injectScript(tabId);
@@ -445,6 +633,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const geo = await updateGeolocation(true);
       sendResponse({ status: "ok", geo });
     })();
+    return true;
+  }
+
+  if (request.action === "getExtensionState") {
+    (async () => {
+      const state = await getExtensionState();
+      sendResponse({ status: "ok", state });
+    })().catch(error => sendResponse({ status: "error", message: error.message }));
+    return true;
+  }
+
+  if (request.action === "setExtensionEnabled") {
+    (async () => {
+      const state = await setExtensionEnabled(request.enabled);
+      sendResponse({ status: "ok", state });
+    })().catch(error => sendResponse({ status: "error", message: error.message }));
     return true;
   }
 
@@ -479,20 +683,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     })().catch(error => sendResponse({ status: "error", message: error.message }));
     return true;
   }
+
+  if (request.action === "getWebRtcConfig") {
+    (async () => {
+      const state = await getWebRtcState();
+      sendResponse({ status: "ok", state });
+    })().catch(error => sendResponse({ status: "error", message: error.message }));
+    return true;
+  }
+
+  if (request.action === "setWebRtcGlobalMode") {
+    (async () => {
+      const state = await setWebRtcGlobalMode(request.mode);
+      sendResponse({ status: "ok", state });
+    })().catch(error => sendResponse({ status: "error", message: error.message }));
+    return true;
+  }
+
 });
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create(ALARM_NAME, { periodInMinutes: 1 });
-  (async () => {
-    await syncProxySettingsFromStorage();
-    await syncLanguageSettingsFromStorage();
-    await updateGeolocation(true);
-  })();
+  initializeExtension();
 });
 chrome.runtime.onStartup.addListener(() => {
-  (async () => {
-    await syncProxySettingsFromStorage();
-    await syncLanguageSettingsFromStorage();
-    await updateGeolocation(true);
-  })();
+  chrome.alarms.create(ALARM_NAME, { periodInMinutes: 1 });
+  initializeExtension();
 });

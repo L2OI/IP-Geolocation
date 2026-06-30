@@ -24,10 +24,11 @@
       padding: 22px;
       color: var(--ink);
       background: var(--paper);
-      font-family: "Bahnschrift", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
-      font-weight: 300;
-      line-height: 1.4;
-      letter-spacing: -.01em;
+      font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
+      font-weight: 400;
+      line-height: 1.48;
+      letter-spacing: .015em;
+      text-rendering: geometricPrecision;
     }
 
     .masthead {
@@ -44,13 +45,14 @@
       font-size: 25px;
       font-weight: 700;
       line-height: 1;
-      letter-spacing: -.05em;
+      letter-spacing: .015em;
     }
 
     .brand-note {
       color: var(--muted);
       font-size: 12px;
-      font-weight: 300;
+      font-weight: 400;
+      letter-spacing: .02em;
       text-align: right;
       white-space: nowrap;
     }
@@ -74,7 +76,7 @@
       margin-bottom: 16px;
       font-size: 17px;
       font-weight: 700;
-      letter-spacing: -.035em;
+      letter-spacing: .025em;
     }
 
     .proxy-grid {
@@ -83,6 +85,7 @@
       gap: 14px 16px;
       align-items: center;
       font-size: 14px;
+      letter-spacing: .01em;
     }
 
     .proxy-grid label {
@@ -165,6 +168,7 @@
       outline-offset: 3px;
     }
 
+    .master-actions,
     .proxy-actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -172,6 +176,52 @@
       margin-top: 18px;
     }
 
+    .webrtc-mode-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    .webrtc-option {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .webrtc-option {
+      color: var(--ink);
+      background: var(--white);
+      border-color: var(--line-strong);
+      transition: none;
+    }
+
+    .webrtc-option.is-active {
+      color: var(--white);
+      background: var(--ink);
+      border-color: var(--ink);
+    }
+
+    .webrtc-option.is-active:disabled {
+      color: var(--white);
+      background: var(--ink);
+      border-color: var(--ink);
+      opacity: 1;
+    }
+
+    .webrtc-option:not(.is-active):hover:not(:disabled) {
+      color: var(--ink);
+      background: var(--field);
+      border-color: var(--ink);
+    }
+
+    .webrtc-option.is-active:hover:not(:disabled) {
+      color: var(--white);
+      background: #2a2a2a;
+      border-color: var(--ink);
+    }
+
+    #master-status,
     #proxy-status,
     #language-status {
       margin-top: 14px;
@@ -227,6 +277,8 @@
       font: inherit;
       font-size: 14px;
       font-weight: 600;
+      letter-spacing: .04em;
+      line-height: 1.35;
       transition: color .2s ease, background-color .2s ease, border-color .2s ease, opacity .2s ease;
     }
 
@@ -265,6 +317,51 @@
       border-color: var(--ink);
     }
 
+    .master-option,
+    .proxy-option {
+      color: var(--ink);
+      background: var(--white);
+      border-color: var(--line-strong);
+      transition: none;
+    }
+
+    .master-option:not(.is-active):hover:not(:disabled),
+    .proxy-option:not(.is-active):hover:not(:disabled) {
+      color: var(--ink);
+      background: var(--field);
+      border-color: var(--ink);
+    }
+
+    .master-option.is-active,
+    .master-option.is-active:hover:not(:disabled),
+    .master-option.is-active:active:not(:disabled),
+    .master-option.is-active:focus-visible,
+    .proxy-option.is-active,
+    .proxy-option.is-active:hover:not(:disabled),
+    .proxy-option.is-active:active:not(:disabled),
+    .proxy-option.is-active:focus-visible,
+    #save-proxy-btn.proxy-option.is-active,
+    #save-proxy-btn.proxy-option.is-active:hover:not(:disabled),
+    #save-proxy-btn.proxy-option.is-active:active:not(:disabled),
+    #disable-proxy-btn.proxy-option.is-active,
+    #disable-proxy-btn.proxy-option.is-active:hover:not(:disabled),
+    #disable-proxy-btn.proxy-option.is-active:active:not(:disabled) {
+      color: var(--white);
+      background: var(--ink);
+      border-color: var(--ink);
+      opacity: 1;
+    }
+
+    .webrtc-option.is-active,
+    .webrtc-option.is-active:hover:not(:disabled),
+    .webrtc-option.is-active:active:not(:disabled),
+    .webrtc-option.is-active:focus-visible {
+      color: var(--white);
+      background: var(--ink);
+      border-color: var(--ink);
+      opacity: 1;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *,
       *::before,
@@ -276,17 +373,23 @@
 </head>
 <body>
   <header class="masthead">
-    <div class="brand">IP定位</div>
-    <div class="brand-note">本地代理</div>
+    <div class="brand" data-i18n="brandTitle">IP定位</div>
+    <div class="brand-note" data-i18n="brandNote">本地代理</div>
   </header>
 
-  <div class="section">
-    <div class="section-title">代理配置</div>
-    <div class="proxy-grid">
-      <label for="proxy-enabled">启用</label>
-      <input id="proxy-enabled" type="checkbox">
+  <div class="section master-section">
+    <div class="section-title" data-i18n="masterSectionTitle">插件功能</div>
+    <div class="master-actions">
+      <button id="master-enable-btn" class="master-option" data-i18n="masterEnableButton">启用</button>
+      <button id="master-disable-btn" class="master-option" data-i18n="masterDisableButton">关闭</button>
+    </div>
+    <div id="master-status" data-i18n="masterLoading">插件状态加载中...</div>
+  </div>
 
-      <label for="proxy-scheme">协议</label>
+  <div class="section">
+    <div class="section-title" data-i18n="proxySectionTitle">代理配置</div>
+    <div class="proxy-grid">
+      <label for="proxy-scheme" data-i18n="labelScheme">协议</label>
       <select id="proxy-scheme">
         <option value="http" selected>HTTP / mixed</option>
         <option value="https">HTTPS</option>
@@ -294,29 +397,38 @@
         <option value="socks4">SOCKS4</option>
       </select>
 
-      <label for="proxy-host">地址</label>
+      <label for="proxy-host" data-i18n="labelHost">地址</label>
       <input id="proxy-host" type="text" value="127.0.0.1" spellcheck="false">
 
-      <label for="proxy-port">端口</label>
+      <label for="proxy-port" data-i18n="labelPort">端口</label>
       <input id="proxy-port" type="number" min="1" max="65535" value="10808">
 
-      <label for="proxy-bypass">直连</label>
+      <label for="proxy-bypass" data-i18n="labelBypass">直连</label>
       <input id="proxy-bypass" type="text" value="&lt;-loopback&gt;" spellcheck="false">
     </div>
     <div class="proxy-actions">
-      <button id="save-proxy-btn">保存启用</button>
-      <button id="disable-proxy-btn">关闭代理</button>
+      <button id="save-proxy-btn" class="proxy-option" data-i18n="proxyEnableButton">启用</button>
+      <button id="disable-proxy-btn" class="proxy-option" data-i18n="proxyDisableButton">关闭</button>
     </div>
-    <div id="proxy-status">代理状态加载中...</div>
+    <div id="proxy-status" data-i18n="proxyLoading">代理状态加载中...</div>
   </div>
 
   <div class="section">
-    <div class="section-title">语言伪装</div>
+    <div class="section-title" data-i18n="webRtcSectionTitle">模式</div>
+    <div class="webrtc-mode-grid">
+      <button id="webrtc-strict-btn" class="webrtc-option" data-i18n="webRtcStrictMode">严格模式</button>
+      <button id="webrtc-compatible-btn" class="webrtc-option" data-i18n="webRtcCompatibleMode">兼容模式</button>
+      <button id="webrtc-off-btn" class="webrtc-option" data-i18n="webRtcOffMode">关闭</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title" data-i18n="languageSectionTitle">语言伪装</div>
     <div class="proxy-grid">
-      <label for="language-enabled">启用</label>
+      <label for="language-enabled" data-i18n="labelEnabled">启用</label>
       <input id="language-enabled" type="checkbox">
 
-      <label for="language-preset">语言</label>
+      <label for="language-preset" data-i18n="labelLanguage">语言</label>
       <select id="language-preset">
         <option value="en-US|en-US,en|en-US,en;q=0.9">English (US)</option>
         <option value="en-GB|en-GB,en|en-GB,en;q=0.9">English (UK)</option>
@@ -328,18 +440,18 @@
         <option value="fr-FR|fr-FR,fr,en|fr-FR,fr;q=0.9,en;q=0.8">Français</option>
       </select>
     </div>
-    <button id="save-language-btn">保存语言</button>
-    <div id="language-status">语言状态加载中...</div>
+    <button id="save-language-btn" data-i18n="saveLanguageButton">保存语言</button>
+    <div id="language-status" data-i18n="languageLoading">语言状态加载中...</div>
   </div>
 
   <iframe id="map-frame" src="map.html"></iframe>
   <div id="info-grid">
-    <strong>国家</strong> <span id="country">加载中...</span>
-    <strong>纬度</strong> <span id="latitude">加载中...</span>
-    <strong>经度</strong> <span id="longitude">加载中...</span>
-    <strong>更新于</strong> <span id="updateTime">加载中...</span>
+    <strong data-i18n="fieldCountry">国家</strong> <span id="country" data-i18n="loading">加载中...</span>
+    <strong data-i18n="fieldLatitude">纬度</strong> <span id="latitude" data-i18n="loading">加载中...</span>
+    <strong data-i18n="fieldLongitude">经度</strong> <span id="longitude" data-i18n="loading">加载中...</span>
+    <strong data-i18n="fieldUpdatedAt">更新于</strong> <span id="updateTime" data-i18n="loading">加载中...</span>
   </div>
-  <button id="refresh-btn">立即刷新</button>
+  <button id="refresh-btn" data-i18n="refreshButton">立即刷新</button>
   <script src="popup.js"></script>
 </body>
 </html>

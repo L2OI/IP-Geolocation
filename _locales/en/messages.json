@@ -1,0 +1,161 @@
+{
+  "extName": {
+    "message": "IP Location and Local Proxy"
+  },
+  "extDescription": {
+    "message": "Update browser GPS location from IP geolocation and configure a local browser proxy."
+  },
+  "brandTitle": {
+    "message": "IP Location"
+  },
+  "brandNote": {
+    "message": "Local Proxy"
+  },
+  "proxySectionTitle": {
+    "message": "Proxy"
+  },
+  "masterSectionTitle": {
+    "message": "Extension"
+  },
+  "masterEnableButton": {
+    "message": "Enable"
+  },
+  "masterDisableButton": {
+    "message": "Disable"
+  },
+  "masterLoading": {
+    "message": "Loading extension status..."
+  },
+  "masterEnabledStatus": {
+    "message": "Extension enabled"
+  },
+  "masterDisabledStatus": {
+    "message": "Extension disabled; refresh current pages to fully apply"
+  },
+  "masterReadFailed": {
+    "message": "Failed to read extension status"
+  },
+  "masterSaving": {
+    "message": "Switching extension status..."
+  },
+  "masterSaveFailed": {
+    "message": "Switch failed"
+  },
+  "languageSectionTitle": {
+    "message": "Language Spoofing"
+  },
+  "webRtcSectionTitle": {
+    "message": "Mode"
+  },
+  "webRtcStrictMode": {
+    "message": "Strict"
+  },
+  "webRtcCompatibleMode": {
+    "message": "Compatible"
+  },
+  "webRtcOffMode": {
+    "message": "Off"
+  },
+  "labelEnabled": {
+    "message": "Enabled"
+  },
+  "labelScheme": {
+    "message": "Scheme"
+  },
+  "labelHost": {
+    "message": "Host"
+  },
+  "labelPort": {
+    "message": "Port"
+  },
+  "labelBypass": {
+    "message": "Bypass"
+  },
+  "labelLanguage": {
+    "message": "Language"
+  },
+  "proxyEnableButton": {
+    "message": "Enable"
+  },
+  "proxyDisableButton": {
+    "message": "Disable"
+  },
+  "saveEnableButton": {
+    "message": "Enable"
+  },
+  "disableProxyButton": {
+    "message": "Disable"
+  },
+  "saveLanguageButton": {
+    "message": "Save Language"
+  },
+  "refreshButton": {
+    "message": "Refresh"
+  },
+  "refreshingButton": {
+    "message": "Refreshing..."
+  },
+  "proxyLoading": {
+    "message": "Loading proxy status..."
+  },
+  "languageLoading": {
+    "message": "Loading language status..."
+  },
+  "fieldCountry": {
+    "message": "Country"
+  },
+  "fieldLatitude": {
+    "message": "Latitude"
+  },
+  "fieldLongitude": {
+    "message": "Longitude"
+  },
+  "fieldUpdatedAt": {
+    "message": "Updated"
+  },
+  "loading": {
+    "message": "Loading..."
+  },
+  "noData": {
+    "message": "No data"
+  },
+  "notAvailable": {
+    "message": "N/A"
+  },
+  "proxyEnabledPrefix": {
+    "message": "Enabled"
+  },
+  "proxyDisabled": {
+    "message": "Proxy disabled"
+  },
+  "proxyReadFailed": {
+    "message": "Failed to read proxy config"
+  },
+  "proxySaving": {
+    "message": "Saving proxy config..."
+  },
+  "proxySaveFailed": {
+    "message": "Save failed"
+  },
+  "proxyDisabling": {
+    "message": "Disabling proxy..."
+  },
+  "proxyDisableFailed": {
+    "message": "Disable failed"
+  },
+  "languageEnabledPrefix": {
+    "message": "Enabled"
+  },
+  "languageDisabled": {
+    "message": "Language spoofing disabled"
+  },
+  "languageReadFailed": {
+    "message": "Failed to read language config"
+  },
+  "languageSaving": {
+    "message": "Saving language config..."
+  },
+  "unknownError": {
+    "message": "Unknown error"
+  }
+}
