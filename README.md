@@ -1,23 +1,2 @@
-# IP Geolocation and Local Proxy
-
-A Chromium Manifest V3 extension for IP-based geolocation spoofing, local proxy switching, language spoofing, and WebRTC mode control.
-
-## Features
-
-- Local browser proxy switch with configurable scheme, host, port, and bypass list
-- Geolocation and timezone spoofing based on detected IP location
-- Language and `Accept-Language` spoofing
-- WebRTC privacy modes
-- Extension-level enable/disable switch
-- Chinese and English extension UI
-
-## Load unpacked
-
-1. Open `chrome://extensions/`.
-2. Enable Developer mode.
-3. Click **Load unpacked**.
-4. Select this folder.
-
-## Notes
-
-Build outputs, signing keys, browser profiles, capture files, and temporary files are intentionally excluded from this repository.
+一个简单的浏览器插件
+可以通过指纹浏览器在线检测，避免语言，ip地址和代理地址不一致的情况，减少风风控，会对你的Chatgpt，Claude，Gemini生效
