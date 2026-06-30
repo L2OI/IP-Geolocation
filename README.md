@@ -9,4 +9,6 @@
 
 A simple Chromium browser extension that helps browser fingerprint checkers pass online consistency checks by keeping language, IP geolocation, proxy settings, timezone, and WebRTC behavior aligned.
 
+Instructions: Download the ZIP file, then drag it into the Extensions page.
+
 LINUX DO
