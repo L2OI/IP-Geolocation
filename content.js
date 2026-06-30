@@ -1,5 +1,5 @@
 (function() {
-  chrome.storage.local.get(['extensionEnabled', 'lastLocation', 'languageConfig'], ({ extensionEnabled, lastLocation, languageConfig }) => {
+  chrome.storage.local.get(['extensionEnabled', 'lastLocation', 'languageConfig', 'timezoneConfig'], ({ extensionEnabled, lastLocation, languageConfig, timezoneConfig }) => {
     if (extensionEnabled === false) return;
     if (!lastLocation || !lastLocation.latitude || !lastLocation.longitude) return;
     window.postMessage({
@@ -8,7 +8,8 @@
       payload: {
         extensionEnabled,
         ...lastLocation,
-        languageConfig
+        languageConfig,
+        timezoneConfig
       }
     }, '*');
   });

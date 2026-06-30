@@ -1,6 +1,7 @@
 const countryEl = document.getElementById('country');
 const latitudeEl = document.getElementById('latitude');
 const longitudeEl = document.getElementById('longitude');
+const timezoneValueEl = document.getElementById('timezone');
 const updateTimeEl = document.getElementById('updateTime');
 const refreshBtn = document.getElementById('refresh-btn');
 const mapFrame = document.getElementById('map-frame');
@@ -18,6 +19,11 @@ const languageEnabledEl = document.getElementById('language-enabled');
 const languagePresetEl = document.getElementById('language-preset');
 const saveLanguageBtn = document.getElementById('save-language-btn');
 const languageStatusEl = document.getElementById('language-status');
+const timezoneEnabledEl = document.getElementById('timezone-enabled');
+const timezoneModeEl = document.getElementById('timezone-mode');
+const timezoneSelectEl = document.getElementById('timezone-select');
+const saveTimezoneBtn = document.getElementById('save-timezone-btn');
+const timezoneStatusEl = document.getElementById('timezone-status');
 const webRtcStrictBtn = document.getElementById('webrtc-strict-btn');
 const webRtcCompatibleBtn = document.getElementById('webrtc-compatible-btn');
 const webRtcOffBtn = document.getElementById('webrtc-off-btn');
@@ -51,6 +57,11 @@ const DEFAULT_LANGUAGE_CONFIG = {
   language: 'en-US',
   languages: ['en-US', 'en'],
   acceptLanguage: 'en-US,en;q=0.9'
+};
+const DEFAULT_TIMEZONE_CONFIG = {
+  enabled: true,
+  mode: 'auto',
+  timezone: ''
 };
 const WEBRTC_STORAGE_KEY = 'webRtcConfig';
 const DEFAULT_WEBRTC_CONFIG = {
@@ -105,12 +116,13 @@ function sendRuntimeMessage(message) {
 
 function updateUI(locationData) {
   if (!locationData) {
-    [countryEl, latitudeEl, longitudeEl, updateTimeEl].forEach(el => el.textContent = t('noData', '暂无数据'));
+    [countryEl, latitudeEl, longitudeEl, timezoneValueEl, updateTimeEl].forEach(el => el.textContent = t('noData', '暂无数据'));
     return;
   }
   countryEl.textContent = locationData.country || t('notAvailable', 'N/A');
   latitudeEl.textContent = locationData.latitude || t('notAvailable', 'N/A');
   longitudeEl.textContent = locationData.longitude || t('notAvailable', 'N/A');
+  timezoneValueEl.textContent = locationData.timezone || t('notAvailable', 'N/A');
   updateTimeEl.textContent = locationData.updateTime || t('notAvailable', 'N/A');
 
   const payload = {
@@ -154,6 +166,16 @@ function setLanguageStatus(text, isError = false) {
   languageStatusEl.style.fontWeight = isError ? '700' : '300';
 }
 
+function setTimezoneStatus(text, isError = false) {
+  timezoneStatusEl.textContent = text;
+  timezoneStatusEl.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+  timezoneStatusEl.style.fontWeight = isError ? '700' : '300';
+}
+
+function updateTimezoneControlState() {
+  timezoneSelectEl.disabled = !extensionEnabled || timezoneModeEl.value !== 'manual';
+}
+
 function setFeatureControlsEnabled(enabled) {
   [
     proxySchemeEl,
@@ -168,10 +190,14 @@ function setFeatureControlsEnabled(enabled) {
     languageEnabledEl,
     languagePresetEl,
     saveLanguageBtn,
+    timezoneEnabledEl,
+    timezoneModeEl,
+    saveTimezoneBtn,
     refreshBtn
   ].forEach((control) => {
     control.disabled = !enabled;
   });
+  updateTimezoneControlState();
 }
 
 function renderMasterToggle(enabled) {
@@ -300,6 +326,53 @@ async function loadLanguageConfig() {
   } catch (error) {
     renderLanguageConfig(DEFAULT_LANGUAGE_CONFIG);
     setLanguageStatus(`${t('languageReadFailed', '读取语言配置失败')}: ${error.message}`, true);
+  }
+}
+
+function normalizeTimezoneConfig(config) {
+  const merged = { ...DEFAULT_TIMEZONE_CONFIG, ...(config || {}) };
+  return {
+    enabled: merged.enabled !== false,
+    mode: merged.mode === 'manual' ? 'manual' : 'auto',
+    timezone: String(merged.timezone || '').trim()
+  };
+}
+
+function renderTimezoneState(state) {
+  const config = normalizeTimezoneConfig(state && state.config ? state.config : DEFAULT_TIMEZONE_CONFIG);
+  timezoneEnabledEl.checked = config.enabled !== false;
+  timezoneModeEl.value = config.mode;
+  timezoneSelectEl.value = config.timezone || timezoneSelectEl.options[0].value;
+  updateTimezoneControlState();
+
+  if (config.enabled === false) {
+    setTimezoneStatus(t('timezoneDisabled', '未启用时区伪装'));
+    return;
+  }
+
+  const effectiveTimezone = state && state.effectiveTimezone ? state.effectiveTimezone : '';
+  if (config.mode === 'manual') {
+    setTimezoneStatus(`${t('timezoneEnabledPrefix', '已启用')}: ${config.timezone || t('notAvailable', 'N/A')}`);
+  } else {
+    setTimezoneStatus(`${t('timezoneAutoPrefix', '跟随 IP')}: ${effectiveTimezone || t('notAvailable', 'N/A')}`);
+  }
+}
+
+function readTimezoneForm() {
+  return {
+    enabled: timezoneEnabledEl.checked,
+    mode: timezoneModeEl.value === 'manual' ? 'manual' : 'auto',
+    timezone: timezoneSelectEl.value
+  };
+}
+
+async function loadTimezoneConfig() {
+  try {
+    const response = await sendRuntimeMessage({ action: 'getTimezoneConfig' });
+    renderTimezoneState(response.state);
+  } catch (error) {
+    renderTimezoneState({ config: DEFAULT_TIMEZONE_CONFIG });
+    setTimezoneStatus(`${t('timezoneReadFailed', '读取时区配置失败')}: ${error.message}`, true);
   }
 }
 
@@ -445,6 +518,25 @@ saveLanguageBtn.addEventListener('click', async () => {
   }
 });
 
+timezoneModeEl.addEventListener('change', updateTimezoneControlState);
+
+saveTimezoneBtn.addEventListener('click', async () => {
+  saveTimezoneBtn.disabled = true;
+  setTimezoneStatus(t('timezoneSaving', '正在保存时区配置...'));
+  try {
+    const response = await sendRuntimeMessage({
+      action: 'setTimezoneConfig',
+      config: readTimezoneForm()
+    });
+    renderTimezoneState(response.state);
+  } catch (error) {
+    setTimezoneStatus(`${t('timezoneSaveFailed', '保存失败')}: ${error.message}`, true);
+  } finally {
+    saveTimezoneBtn.disabled = false;
+    setFeatureControlsEnabled(extensionEnabled);
+  }
+});
+
 document.addEventListener('DOMContentLoaded', async () => {
   localizePopup();
   await loadExtensionState();
@@ -452,4 +544,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadProxyConfig();
   loadWebRtcConfig();
   loadLanguageConfig();
+  loadTimezoneConfig();
 });

@@ -223,6 +223,7 @@
 
     #master-status,
     #proxy-status,
+    #timezone-status,
     #language-status {
       margin-top: 14px;
       padding: 11px 0 0;
@@ -444,11 +445,45 @@
     <div id="language-status" data-i18n="languageLoading">语言状态加载中...</div>
   </div>
 
+  <div class="section">
+    <div class="section-title" data-i18n="timezoneSectionTitle">时区伪装</div>
+    <div class="proxy-grid">
+      <label for="timezone-enabled" data-i18n="labelEnabled">启用</label>
+      <input id="timezone-enabled" type="checkbox">
+
+      <label for="timezone-mode" data-i18n="labelTimezoneMode">模式</label>
+      <select id="timezone-mode">
+        <option value="auto" data-i18n="timezoneAutoMode">跟随 IP</option>
+        <option value="manual" data-i18n="timezoneManualMode">手动指定</option>
+      </select>
+
+      <label for="timezone-select" data-i18n="labelTimezone">时区</label>
+      <select id="timezone-select">
+        <option value="UTC">UTC</option>
+        <option value="America/Los_Angeles">America/Los_Angeles</option>
+        <option value="America/New_York">America/New_York</option>
+        <option value="America/Chicago">America/Chicago</option>
+        <option value="Europe/London">Europe/London</option>
+        <option value="Europe/Berlin">Europe/Berlin</option>
+        <option value="Europe/Paris">Europe/Paris</option>
+        <option value="Asia/Shanghai">Asia/Shanghai</option>
+        <option value="Asia/Hong_Kong">Asia/Hong_Kong</option>
+        <option value="Asia/Tokyo">Asia/Tokyo</option>
+        <option value="Asia/Seoul">Asia/Seoul</option>
+        <option value="Asia/Singapore">Asia/Singapore</option>
+        <option value="Australia/Sydney">Australia/Sydney</option>
+      </select>
+    </div>
+    <button id="save-timezone-btn" data-i18n="saveTimezoneButton">保存时区</button>
+    <div id="timezone-status" data-i18n="timezoneLoading">时区状态加载中...</div>
+  </div>
+
   <iframe id="map-frame" src="map.html"></iframe>
   <div id="info-grid">
     <strong data-i18n="fieldCountry">国家</strong> <span id="country" data-i18n="loading">加载中...</span>
     <strong data-i18n="fieldLatitude">纬度</strong> <span id="latitude" data-i18n="loading">加载中...</span>
     <strong data-i18n="fieldLongitude">经度</strong> <span id="longitude" data-i18n="loading">加载中...</span>
+    <strong data-i18n="fieldTimezone">时区</strong> <span id="timezone" data-i18n="loading">加载中...</span>
     <strong data-i18n="fieldUpdatedAt">更新于</strong> <span id="updateTime" data-i18n="loading">加载中...</span>
   </div>
   <button id="refresh-btn" data-i18n="refreshButton">立即刷新</button>

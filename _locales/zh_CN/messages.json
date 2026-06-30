@@ -44,6 +44,9 @@
   "languageSectionTitle": {
     "message": "语言伪装"
   },
+  "timezoneSectionTitle": {
+    "message": "时区伪装"
+  },
   "webRtcSectionTitle": {
     "message": "模式"
   },
@@ -74,6 +77,18 @@
   "labelLanguage": {
     "message": "语言"
   },
+  "labelTimezoneMode": {
+    "message": "模式"
+  },
+  "labelTimezone": {
+    "message": "时区"
+  },
+  "timezoneAutoMode": {
+    "message": "跟随 IP"
+  },
+  "timezoneManualMode": {
+    "message": "手动指定"
+  },
   "proxyEnableButton": {
     "message": "启用"
   },
@@ -89,6 +104,9 @@
   "saveLanguageButton": {
     "message": "保存语言"
   },
+  "saveTimezoneButton": {
+    "message": "保存时区"
+  },
   "refreshButton": {
     "message": "立即刷新"
   },
@@ -101,6 +119,9 @@
   "languageLoading": {
     "message": "语言状态加载中..."
   },
+  "timezoneLoading": {
+    "message": "时区状态加载中..."
+  },
   "fieldCountry": {
     "message": "国家"
   },
@@ -109,6 +130,9 @@
   },
   "fieldLongitude": {
     "message": "经度"
+  },
+  "fieldTimezone": {
+    "message": "时区"
   },
   "fieldUpdatedAt": {
     "message": "更新于"
@@ -154,6 +178,24 @@
   },
   "languageSaving": {
     "message": "正在保存语言配置..."
+  },
+  "timezoneEnabledPrefix": {
+    "message": "已启用"
+  },
+  "timezoneAutoPrefix": {
+    "message": "跟随 IP"
+  },
+  "timezoneDisabled": {
+    "message": "未启用时区伪装"
+  },
+  "timezoneReadFailed": {
+    "message": "读取时区配置失败"
+  },
+  "timezoneSaving": {
+    "message": "正在保存时区配置..."
+  },
+  "timezoneSaveFailed": {
+    "message": "保存失败"
   },
   "unknownError": {
     "message": "未知错误"

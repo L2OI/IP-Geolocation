@@ -44,6 +44,9 @@
   "languageSectionTitle": {
     "message": "Language Spoofing"
   },
+  "timezoneSectionTitle": {
+    "message": "Timezone Spoofing"
+  },
   "webRtcSectionTitle": {
     "message": "Mode"
   },
@@ -74,6 +77,18 @@
   "labelLanguage": {
     "message": "Language"
   },
+  "labelTimezoneMode": {
+    "message": "Mode"
+  },
+  "labelTimezone": {
+    "message": "Timezone"
+  },
+  "timezoneAutoMode": {
+    "message": "Follow IP"
+  },
+  "timezoneManualMode": {
+    "message": "Manual"
+  },
   "proxyEnableButton": {
     "message": "Enable"
   },
@@ -89,6 +104,9 @@
   "saveLanguageButton": {
     "message": "Save Language"
   },
+  "saveTimezoneButton": {
+    "message": "Save Timezone"
+  },
   "refreshButton": {
     "message": "Refresh"
   },
@@ -101,6 +119,9 @@
   "languageLoading": {
     "message": "Loading language status..."
   },
+  "timezoneLoading": {
+    "message": "Loading timezone status..."
+  },
   "fieldCountry": {
     "message": "Country"
   },
@@ -109,6 +130,9 @@
   },
   "fieldLongitude": {
     "message": "Longitude"
+  },
+  "fieldTimezone": {
+    "message": "Timezone"
   },
   "fieldUpdatedAt": {
     "message": "Updated"
@@ -154,6 +178,24 @@
   },
   "languageSaving": {
     "message": "Saving language config..."
+  },
+  "timezoneEnabledPrefix": {
+    "message": "Enabled"
+  },
+  "timezoneAutoPrefix": {
+    "message": "Follow IP"
+  },
+  "timezoneDisabled": {
+    "message": "Timezone spoofing disabled"
+  },
+  "timezoneReadFailed": {
+    "message": "Failed to read timezone config"
+  },
+  "timezoneSaving": {
+    "message": "Saving timezone config..."
+  },
+  "timezoneSaveFailed": {
+    "message": "Save failed"
   },
   "unknownError": {
     "message": "Unknown error"

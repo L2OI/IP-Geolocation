@@ -12,6 +12,7 @@ const FALLBACK_LOCATION = {
 const PROXY_STORAGE_KEY = 'proxyConfig';
 const LANGUAGE_STORAGE_KEY = 'languageConfig';
 const WEBRTC_STORAGE_KEY = 'webRtcConfig';
+const TIMEZONE_STORAGE_KEY = 'timezoneConfig';
 const EXTENSION_ENABLED_KEY = 'extensionEnabled';
 const LANGUAGE_RULE_ID = 1001;
 const MAIN_CONTENT_SCRIPT_ID = 'ipgeo-main-spoof';
@@ -29,6 +30,11 @@ const DEFAULT_LANGUAGE_CONFIG = {
   language: 'en-US',
   languages: ['en-US', 'en'],
   acceptLanguage: 'en-US,en;q=0.9'
+};
+const DEFAULT_TIMEZONE_CONFIG = {
+  enabled: true,
+  mode: 'auto',
+  timezone: ''
 };
 const DEFAULT_WEBRTC_CONFIG = {
   globalMode: 'strict'
@@ -153,6 +159,44 @@ function normalizeLanguageConfig(config = {}) {
     language,
     languages,
     acceptLanguage
+  };
+}
+
+function normalizeTimezoneConfig(config = {}) {
+  const mode = config.mode === 'manual' ? 'manual' : 'auto';
+  const timezone = String(config.timezone || '').trim();
+
+  return {
+    enabled: config.enabled !== false,
+    mode,
+    timezone
+  };
+}
+
+function resolveTimezone(location, config = {}) {
+  const normalized = normalizeTimezoneConfig(config);
+  if (!normalized.enabled) {
+    return {
+      config: normalized,
+      timezone: null,
+      timezoneOffset: null
+    };
+  }
+
+  if (normalized.mode === 'manual' && normalized.timezone) {
+    return {
+      config: normalized,
+      timezone: normalized.timezone,
+      timezoneOffset: null
+    };
+  }
+
+  return {
+    config: normalized,
+    timezone: location && location.timezone ? location.timezone : null,
+    timezoneOffset: location && Number.isFinite(Number(location.timezoneOffset))
+      ? Number(location.timezoneOffset)
+      : null
   };
 }
 
@@ -400,108 +444,62 @@ async function syncLanguageSettingsFromStorage() {
   await applyLanguageHeaderRules(normalized, await getExtensionEnabled());
 }
 
-const spooferFunction = (latitude, longitude, timezone, timezoneOffset, languageConfig) => {
-  const languagePayload = languageConfig && languageConfig.enabled ? languageConfig : null;
-  if (languagePayload) {
-    Object.defineProperty(navigator, 'language', {
-      get: () => languagePayload.language,
-      configurable: true
-    });
-    Object.defineProperty(navigator, 'languages', {
-      get: () => languagePayload.languages,
-      configurable: true
-    });
-  }
+async function getTimezoneConfig() {
+  const data = await chrome.storage.local.get(TIMEZONE_STORAGE_KEY);
+  return normalizeTimezoneConfig(data[TIMEZONE_STORAGE_KEY] || DEFAULT_TIMEZONE_CONFIG);
+}
 
-  navigator.geolocation.getCurrentPosition = (successCallback, errorCallback, options) => {
-    successCallback({
-      coords: {
-        latitude: latitude,
-        longitude: longitude,
-        accuracy: 20 + Math.random() * 10,
-        altitude: null, altitudeAccuracy: null, heading: null, speed: null
-      },
-      timestamp: Date.now()
-    });
+async function getTimezoneState() {
+  const data = await chrome.storage.local.get(['lastLocation', TIMEZONE_STORAGE_KEY]);
+  const config = normalizeTimezoneConfig(data[TIMEZONE_STORAGE_KEY] || DEFAULT_TIMEZONE_CONFIG);
+  const resolved = resolveTimezone(data.lastLocation, config);
+  return {
+    config: resolved.config,
+    effectiveTimezone: resolved.timezone,
+    effectiveTimezoneOffset: resolved.timezoneOffset
   };
-  navigator.geolocation.watchPosition = (successCallback, errorCallback, options) => {
-    navigator.geolocation.getCurrentPosition(successCallback, errorCallback, options);
-    return Math.floor(Math.random() * 10000);
-  };
+}
 
-  if (timezone || languagePayload) {
-    const OriginalDateTimeFormat = Intl.DateTimeFormat;
-    const originalResolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
-    Intl.DateTimeFormat.prototype.resolvedOptions = function() {
-      const options = originalResolvedOptions.call(this);
-      return {
-        ...options,
-        locale: languagePayload ? languagePayload.language : options.locale,
-        timeZone: timezone || options.timeZone
-      };
-    };
+async function saveAndApplyTimezoneConfig(config) {
+  const normalized = normalizeTimezoneConfig(config);
+  await chrome.storage.local.set({ [TIMEZONE_STORAGE_KEY]: normalized });
+  await updateAllTabs();
+  return getTimezoneState();
+}
 
-    if (timezone && Number.isFinite(Number(timezoneOffset))) {
-      Date.prototype.getTimezoneOffset = function() {
-        return Number(timezoneOffset);
-      };
-    }
+async function syncTimezoneSettingsFromStorage() {
+  const data = await chrome.storage.local.get(TIMEZONE_STORAGE_KEY);
+  const normalized = normalizeTimezoneConfig(data[TIMEZONE_STORAGE_KEY] || DEFAULT_TIMEZONE_CONFIG);
+  await chrome.storage.local.set({ [TIMEZONE_STORAGE_KEY]: normalized });
+}
 
-    const getParts = (date) => {
-      const formatter = new OriginalDateTimeFormat('en-US', {
-        timeZone: timezone,
-        hour12: false,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        weekday: 'short',
-        timeZoneName: 'long'
-      });
-      const parts = {};
-      formatter.formatToParts(date).forEach((part) => {
-        if (part.type !== 'literal') parts[part.type] = part.value;
-      });
-      return parts;
-    };
-
-    const pad = (value) => String(value).padStart(2, '0');
-    const formatOffset = () => {
-      const offset = Number.isFinite(Number(timezoneOffset)) ? Number(timezoneOffset) : new Date().getTimezoneOffset();
-      const sign = offset <= 0 ? '+' : '-';
-      const abs = Math.abs(offset);
-      return `${sign}${pad(Math.floor(abs / 60))}${pad(abs % 60)}`;
-    };
-
-    if (timezone) {
-      Date.prototype.toString = function() {
-        const parts = getParts(this);
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const month = months[Math.max(0, Math.min(11, Number(parts.month) - 1))];
-        return `${parts.weekday} ${month} ${parts.day} ${parts.year} ${parts.hour}:${parts.minute}:${parts.second} GMT${formatOffset()} (${parts.timeZoneName || timezone})`;
-      };
-    }
-  }
+const spooferFunction = (payload) => {
+  window.postMessage({
+    source: 'ip-geolocation-extension',
+    type: 'apply-spoof',
+    payload
+  }, '*');
 };
 
 async function injectScript(tabId) {
   if (!(await getExtensionEnabled())) return;
 
-  const { lastLocation, languageConfig } = await chrome.storage.local.get(['lastLocation', LANGUAGE_STORAGE_KEY]);
+  const { lastLocation, languageConfig, timezoneConfig } = await chrome.storage.local.get(['lastLocation', LANGUAGE_STORAGE_KEY, TIMEZONE_STORAGE_KEY]);
   const normalizedLanguage = normalizeLanguageConfig(languageConfig || DEFAULT_LANGUAGE_CONFIG);
+  const resolvedTimezone = resolveTimezone(lastLocation, timezoneConfig || DEFAULT_TIMEZONE_CONFIG);
   if (lastLocation && lastLocation.latitude && lastLocation.longitude) {
     chrome.scripting.executeScript({
       target: { tabId: tabId, allFrames: true },
       func: spooferFunction,
-      args: [
-        lastLocation.latitude,
-        lastLocation.longitude,
-        lastLocation.timezone,
-        lastLocation.timezoneOffset,
-        normalizedLanguage
-      ],
+      args: [{
+        extensionEnabled: true,
+        latitude: lastLocation.latitude,
+        longitude: lastLocation.longitude,
+        timezone: resolvedTimezone.timezone,
+        timezoneOffset: resolvedTimezone.timezoneOffset,
+        timezoneConfig: resolvedTimezone.config,
+        languageConfig: normalizedLanguage
+      }],
       injectImmediately: true,
       world: 'MAIN'
     }).catch(error => console.log(`无法注入到 Tab \({tabId}: \){error.message}`));
@@ -583,6 +581,7 @@ async function activateRuntimeSideEffects() {
   await registerSpoofContentScripts();
   await syncProxySettingsFromStorage();
   await syncLanguageSettingsFromStorage();
+  await syncTimezoneSettingsFromStorage();
   await applyWebRtcSettings();
   await updateGeolocation(true);
   await updateAllTabs();
@@ -680,6 +679,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     (async () => {
       const config = await saveAndApplyLanguageConfig(request.config || {});
       sendResponse({ status: "ok", config });
+    })().catch(error => sendResponse({ status: "error", message: error.message }));
+    return true;
+  }
+
+  if (request.action === "getTimezoneConfig") {
+    (async () => {
+      const state = await getTimezoneState();
+      sendResponse({ status: "ok", state });
+    })().catch(error => sendResponse({ status: "error", message: error.message }));
+    return true;
+  }
+
+  if (request.action === "setTimezoneConfig") {
+    (async () => {
+      const state = await saveAndApplyTimezoneConfig(request.config || {});
+      sendResponse({ status: "ok", state });
     })().catch(error => sendResponse({ status: "error", message: error.message }));
     return true;
   }
