@@ -19,6 +19,11 @@ const languageEnabledEl = document.getElementById('language-enabled');
 const languagePresetEl = document.getElementById('language-preset');
 const saveLanguageBtn = document.getElementById('save-language-btn');
 const languageStatusEl = document.getElementById('language-status');
+const fingerprintFontsEnabledEl = document.getElementById('fingerprint-fonts-enabled');
+const fingerprintEmojiEnabledEl = document.getElementById('fingerprint-emoji-enabled');
+const fingerprintExcludeCloudflareEl = document.getElementById('fingerprint-exclude-cloudflare');
+const saveFingerprintBtn = document.getElementById('save-fingerprint-btn');
+const fingerprintStatusEl = document.getElementById('fingerprint-status');
 const timezoneEnabledEl = document.getElementById('timezone-enabled');
 const timezoneModeEl = document.getElementById('timezone-mode');
 const timezoneSelectEl = document.getElementById('timezone-select');
@@ -62,6 +67,12 @@ const DEFAULT_TIMEZONE_CONFIG = {
   enabled: true,
   mode: 'auto',
   timezone: ''
+};
+const DEFAULT_FINGERPRINT_CONFIG = {
+  enabled: true,
+  fonts: true,
+  emoji: true,
+  excludeCloudflare: true
 };
 const WEBRTC_STORAGE_KEY = 'webRtcConfig';
 const DEFAULT_WEBRTC_CONFIG = {
@@ -172,6 +183,12 @@ function setTimezoneStatus(text, isError = false) {
   timezoneStatusEl.style.fontWeight = isError ? '700' : '300';
 }
 
+function setFingerprintStatus(text, isError = false) {
+  fingerprintStatusEl.textContent = text;
+  fingerprintStatusEl.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+  fingerprintStatusEl.style.fontWeight = isError ? '700' : '300';
+}
+
 function updateTimezoneControlState() {
   timezoneSelectEl.disabled = !extensionEnabled || timezoneModeEl.value !== 'manual';
 }
@@ -190,6 +207,10 @@ function setFeatureControlsEnabled(enabled) {
     languageEnabledEl,
     languagePresetEl,
     saveLanguageBtn,
+    fingerprintFontsEnabledEl,
+    fingerprintEmojiEnabledEl,
+    fingerprintExcludeCloudflareEl,
+    saveFingerprintBtn,
     timezoneEnabledEl,
     timezoneModeEl,
     saveTimezoneBtn,
@@ -326,6 +347,53 @@ async function loadLanguageConfig() {
   } catch (error) {
     renderLanguageConfig(DEFAULT_LANGUAGE_CONFIG);
     setLanguageStatus(`${t('languageReadFailed', '读取语言配置失败')}: ${error.message}`, true);
+  }
+}
+
+function normalizeFingerprintConfig(config) {
+  return {
+    ...DEFAULT_FINGERPRINT_CONFIG,
+    ...(config || {}),
+    enabled: config && config.enabled === false ? false : true,
+    fonts: config && config.fonts === false ? false : true,
+    emoji: config && config.emoji === false ? false : true,
+    excludeCloudflare: config && config.excludeCloudflare === false ? false : true
+  };
+}
+
+function renderFingerprintConfig(config) {
+  const normalized = normalizeFingerprintConfig(config);
+  fingerprintFontsEnabledEl.checked = normalized.fonts !== false;
+  fingerprintEmojiEnabledEl.checked = normalized.emoji !== false;
+  fingerprintExcludeCloudflareEl.checked = normalized.excludeCloudflare !== false;
+  const activeItems = [];
+  if (normalized.fonts !== false) activeItems.push(t('fingerprintFontsLabel', '字体'));
+  if (normalized.emoji !== false) activeItems.push('Emoji');
+  setFingerprintStatus(
+    activeItems.length
+      ? `${t('fingerprintEnabledPrefix', '已启用')}: ${activeItems.join(' / ')}${normalized.excludeCloudflare !== false ? `, ${t('fingerprintCloudflareExcluded', '已排除 CF')}` : ''}`
+      : t('fingerprintDisabled', '未启用字体/Emoji 伪装')
+  );
+}
+
+function readFingerprintForm() {
+  const fonts = fingerprintFontsEnabledEl.checked;
+  const emoji = fingerprintEmojiEnabledEl.checked;
+  return {
+    enabled: fonts || emoji,
+    fonts,
+    emoji,
+    excludeCloudflare: fingerprintExcludeCloudflareEl.checked
+  };
+}
+
+async function loadFingerprintConfig() {
+  try {
+    const response = await sendRuntimeMessage({ action: 'getFingerprintConfig' });
+    renderFingerprintConfig(response.config);
+  } catch (error) {
+    renderFingerprintConfig(DEFAULT_FINGERPRINT_CONFIG);
+    setFingerprintStatus(`${t('fingerprintReadFailed', '读取字体/Emoji 配置失败')}: ${error.message}`, true);
   }
 }
 
@@ -518,6 +586,22 @@ saveLanguageBtn.addEventListener('click', async () => {
   }
 });
 
+saveFingerprintBtn.addEventListener('click', async () => {
+  saveFingerprintBtn.disabled = true;
+  setFingerprintStatus(t('fingerprintSaving', '正在保存字体/Emoji 配置...'));
+  try {
+    const response = await sendRuntimeMessage({
+      action: 'setFingerprintConfig',
+      config: readFingerprintForm()
+    });
+    renderFingerprintConfig(response.config);
+  } catch (error) {
+    setFingerprintStatus(`${t('fingerprintSaveFailed', '保存失败')}: ${error.message}`, true);
+  } finally {
+    saveFingerprintBtn.disabled = false;
+  }
+});
+
 timezoneModeEl.addEventListener('change', updateTimezoneControlState);
 
 saveTimezoneBtn.addEventListener('click', async () => {
@@ -544,5 +628,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadProxyConfig();
   loadWebRtcConfig();
   loadLanguageConfig();
+  loadFingerprintConfig();
   loadTimezoneConfig();
 });

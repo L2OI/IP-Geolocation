@@ -224,7 +224,8 @@
     #master-status,
     #proxy-status,
     #timezone-status,
-    #language-status {
+    #language-status,
+    #fingerprint-status {
       margin-top: 14px;
       padding: 11px 0 0;
       color: var(--muted);
@@ -316,6 +317,10 @@
       color: var(--white);
       background: var(--ink);
       border-color: var(--ink);
+    }
+
+    #save-fingerprint-btn {
+      margin-top: 18px;
     }
 
     .master-option,
@@ -443,6 +448,22 @@
     </div>
     <button id="save-language-btn" data-i18n="saveLanguageButton">保存语言</button>
     <div id="language-status" data-i18n="languageLoading">语言状态加载中...</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title" data-i18n="fingerprintSectionTitle">字体/Emoji 伪装</div>
+    <div class="proxy-grid">
+      <label for="fingerprint-fonts-enabled" data-i18n="labelFonts">字体</label>
+      <input id="fingerprint-fonts-enabled" type="checkbox">
+
+      <label for="fingerprint-emoji-enabled" data-i18n="labelEmoji">Emoji</label>
+      <input id="fingerprint-emoji-enabled" type="checkbox">
+
+      <label for="fingerprint-exclude-cloudflare" data-i18n="labelExcludeCloudflare">排除 CF</label>
+      <input id="fingerprint-exclude-cloudflare" type="checkbox">
+    </div>
+    <button id="save-fingerprint-btn" data-i18n="saveFingerprintButton">保存伪装</button>
+    <div id="fingerprint-status" data-i18n="fingerprintLoading">字体/Emoji 状态加载中...</div>
   </div>
 
   <div class="section">

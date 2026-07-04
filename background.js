@@ -13,11 +13,16 @@ const PROXY_STORAGE_KEY = 'proxyConfig';
 const LANGUAGE_STORAGE_KEY = 'languageConfig';
 const WEBRTC_STORAGE_KEY = 'webRtcConfig';
 const TIMEZONE_STORAGE_KEY = 'timezoneConfig';
+const FINGERPRINT_STORAGE_KEY = 'fingerprintConfig';
 const EXTENSION_ENABLED_KEY = 'extensionEnabled';
 const LANGUAGE_RULE_ID = 1001;
 const MAIN_CONTENT_SCRIPT_ID = 'ipgeo-main-spoof';
 const BRIDGE_CONTENT_SCRIPT_ID = 'ipgeo-bridge';
 const CONTENT_SCRIPT_IDS = [MAIN_CONTENT_SCRIPT_ID, BRIDGE_CONTENT_SCRIPT_ID];
+const SPOOF_EXCLUDE_MATCHES = [
+  '*://challenges.cloudflare.com/*',
+  '*://*.cloudflare.com/cdn-cgi/challenge-platform/*'
+];
 const DEFAULT_PROXY_CONFIG = {
   enabled: false,
   scheme: 'http',
@@ -38,6 +43,12 @@ const DEFAULT_TIMEZONE_CONFIG = {
 };
 const DEFAULT_WEBRTC_CONFIG = {
   globalMode: 'strict'
+};
+const DEFAULT_FINGERPRINT_CONFIG = {
+  enabled: true,
+  fonts: true,
+  emoji: true,
+  excludeCloudflare: true
 };
 const WEBRTC_POLICY_VALUES = {
   strict: 'disable_non_proxied_udp',
@@ -99,6 +110,7 @@ async function registerSpoofContentScripts() {
       runAt: 'document_start',
       allFrames: true,
       world: 'MAIN',
+      excludeMatches: SPOOF_EXCLUDE_MATCHES,
       persistAcrossSessions: true
     },
     {
@@ -107,6 +119,7 @@ async function registerSpoofContentScripts() {
       js: ['content.js'],
       runAt: 'document_start',
       allFrames: true,
+      excludeMatches: SPOOF_EXCLUDE_MATCHES,
       persistAcrossSessions: true
     }
   ]);
@@ -170,6 +183,15 @@ function normalizeTimezoneConfig(config = {}) {
     enabled: config.enabled !== false,
     mode,
     timezone
+  };
+}
+
+function normalizeFingerprintConfig(config = {}) {
+  return {
+    enabled: config.enabled !== false,
+    fonts: config.fonts !== false,
+    emoji: config.emoji !== false,
+    excludeCloudflare: config.excludeCloudflare !== false
   };
 }
 
@@ -473,6 +495,24 @@ async function syncTimezoneSettingsFromStorage() {
   await chrome.storage.local.set({ [TIMEZONE_STORAGE_KEY]: normalized });
 }
 
+async function getFingerprintConfig() {
+  const data = await chrome.storage.local.get(FINGERPRINT_STORAGE_KEY);
+  return normalizeFingerprintConfig(data[FINGERPRINT_STORAGE_KEY] || DEFAULT_FINGERPRINT_CONFIG);
+}
+
+async function saveAndApplyFingerprintConfig(config) {
+  const normalized = normalizeFingerprintConfig(config);
+  await chrome.storage.local.set({ [FINGERPRINT_STORAGE_KEY]: normalized });
+  await updateAllTabs();
+  return normalized;
+}
+
+async function syncFingerprintSettingsFromStorage() {
+  const data = await chrome.storage.local.get(FINGERPRINT_STORAGE_KEY);
+  const normalized = normalizeFingerprintConfig(data[FINGERPRINT_STORAGE_KEY] || DEFAULT_FINGERPRINT_CONFIG);
+  await chrome.storage.local.set({ [FINGERPRINT_STORAGE_KEY]: normalized });
+}
+
 const spooferFunction = (payload) => {
   window.postMessage({
     source: 'ip-geolocation-extension',
@@ -484,9 +524,15 @@ const spooferFunction = (payload) => {
 async function injectScript(tabId) {
   if (!(await getExtensionEnabled())) return;
 
-  const { lastLocation, languageConfig, timezoneConfig } = await chrome.storage.local.get(['lastLocation', LANGUAGE_STORAGE_KEY, TIMEZONE_STORAGE_KEY]);
+  const { lastLocation, languageConfig, timezoneConfig, fingerprintConfig } = await chrome.storage.local.get([
+    'lastLocation',
+    LANGUAGE_STORAGE_KEY,
+    TIMEZONE_STORAGE_KEY,
+    FINGERPRINT_STORAGE_KEY
+  ]);
   const normalizedLanguage = normalizeLanguageConfig(languageConfig || DEFAULT_LANGUAGE_CONFIG);
   const resolvedTimezone = resolveTimezone(lastLocation, timezoneConfig || DEFAULT_TIMEZONE_CONFIG);
+  const normalizedFingerprint = normalizeFingerprintConfig(fingerprintConfig || DEFAULT_FINGERPRINT_CONFIG);
   if (lastLocation && lastLocation.latitude && lastLocation.longitude) {
     chrome.scripting.executeScript({
       target: { tabId: tabId, allFrames: true },
@@ -498,7 +544,8 @@ async function injectScript(tabId) {
         timezone: resolvedTimezone.timezone,
         timezoneOffset: resolvedTimezone.timezoneOffset,
         timezoneConfig: resolvedTimezone.config,
-        languageConfig: normalizedLanguage
+        languageConfig: normalizedLanguage,
+        fingerprintConfig: normalizedFingerprint
       }],
       injectImmediately: true,
       world: 'MAIN'
@@ -582,6 +629,7 @@ async function activateRuntimeSideEffects() {
   await syncProxySettingsFromStorage();
   await syncLanguageSettingsFromStorage();
   await syncTimezoneSettingsFromStorage();
+  await syncFingerprintSettingsFromStorage();
   await applyWebRtcSettings();
   await updateGeolocation(true);
   await updateAllTabs();
@@ -715,6 +763,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === "getFingerprintConfig") {
+    (async () => {
+      const config = await getFingerprintConfig();
+      sendResponse({ status: "ok", config });
+    })().catch(error => sendResponse({ status: "error", message: error.message }));
+    return true;
+  }
+
+  if (request.action === "setFingerprintConfig") {
+    (async () => {
+      const config = await saveAndApplyFingerprintConfig(request.config || {});
+      sendResponse({ status: "ok", config });
+    })().catch(error => sendResponse({ status: "error", message: error.message }));
+    return true;
+  }
+
 });
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -725,3 +789,4 @@ chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(ALARM_NAME, { periodInMinutes: 1 });
   initializeExtension();
 });
+initializeExtension();

@@ -44,6 +44,9 @@
   "languageSectionTitle": {
     "message": "Language Spoofing"
   },
+  "fingerprintSectionTitle": {
+    "message": "Font/Emoji Spoofing"
+  },
   "timezoneSectionTitle": {
     "message": "Timezone Spoofing"
   },
@@ -77,6 +80,15 @@
   "labelLanguage": {
     "message": "Language"
   },
+  "labelFonts": {
+    "message": "Fonts"
+  },
+  "labelEmoji": {
+    "message": "Emoji"
+  },
+  "labelExcludeCloudflare": {
+    "message": "Exclude CF"
+  },
   "labelTimezoneMode": {
     "message": "Mode"
   },
@@ -104,6 +116,9 @@
   "saveLanguageButton": {
     "message": "Save Language"
   },
+  "saveFingerprintButton": {
+    "message": "Save Spoofing"
+  },
   "saveTimezoneButton": {
     "message": "Save Timezone"
   },
@@ -118,6 +133,9 @@
   },
   "languageLoading": {
     "message": "Loading language status..."
+  },
+  "fingerprintLoading": {
+    "message": "Loading font/emoji status..."
   },
   "timezoneLoading": {
     "message": "Loading timezone status..."
@@ -178,6 +196,27 @@
   },
   "languageSaving": {
     "message": "Saving language config..."
+  },
+  "fingerprintFontsLabel": {
+    "message": "Fonts"
+  },
+  "fingerprintEnabledPrefix": {
+    "message": "Enabled"
+  },
+  "fingerprintCloudflareExcluded": {
+    "message": "CF excluded"
+  },
+  "fingerprintDisabled": {
+    "message": "Font/emoji spoofing disabled"
+  },
+  "fingerprintReadFailed": {
+    "message": "Failed to read font/emoji config"
+  },
+  "fingerprintSaving": {
+    "message": "Saving font/emoji config..."
+  },
+  "fingerprintSaveFailed": {
+    "message": "Save failed"
   },
   "timezoneEnabledPrefix": {
     "message": "Enabled"

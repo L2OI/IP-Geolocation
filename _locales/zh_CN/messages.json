@@ -44,6 +44,9 @@
   "languageSectionTitle": {
     "message": "语言伪装"
   },
+  "fingerprintSectionTitle": {
+    "message": "字体/Emoji 伪装"
+  },
   "timezoneSectionTitle": {
     "message": "时区伪装"
   },
@@ -77,6 +80,15 @@
   "labelLanguage": {
     "message": "语言"
   },
+  "labelFonts": {
+    "message": "字体"
+  },
+  "labelEmoji": {
+    "message": "Emoji"
+  },
+  "labelExcludeCloudflare": {
+    "message": "排除 CF"
+  },
   "labelTimezoneMode": {
     "message": "模式"
   },
@@ -104,6 +116,9 @@
   "saveLanguageButton": {
     "message": "保存语言"
   },
+  "saveFingerprintButton": {
+    "message": "保存伪装"
+  },
   "saveTimezoneButton": {
     "message": "保存时区"
   },
@@ -118,6 +133,9 @@
   },
   "languageLoading": {
     "message": "语言状态加载中..."
+  },
+  "fingerprintLoading": {
+    "message": "字体/Emoji 状态加载中..."
   },
   "timezoneLoading": {
     "message": "时区状态加载中..."
@@ -178,6 +196,27 @@
   },
   "languageSaving": {
     "message": "正在保存语言配置..."
+  },
+  "fingerprintFontsLabel": {
+    "message": "字体"
+  },
+  "fingerprintEnabledPrefix": {
+    "message": "已启用"
+  },
+  "fingerprintCloudflareExcluded": {
+    "message": "已排除 CF"
+  },
+  "fingerprintDisabled": {
+    "message": "未启用字体/Emoji 伪装"
+  },
+  "fingerprintReadFailed": {
+    "message": "读取字体/Emoji 配置失败"
+  },
+  "fingerprintSaving": {
+    "message": "正在保存字体/Emoji 配置..."
+  },
+  "fingerprintSaveFailed": {
+    "message": "保存失败"
   },
   "timezoneEnabledPrefix": {
     "message": "已启用"
