@@ -19,6 +19,7 @@ const LANGUAGE_RULE_ID = 1001;
 const MAIN_CONTENT_SCRIPT_ID = 'ipgeo-main-spoof';
 const BRIDGE_CONTENT_SCRIPT_ID = 'ipgeo-bridge';
 const CONTENT_SCRIPT_IDS = [MAIN_CONTENT_SCRIPT_ID, BRIDGE_CONTENT_SCRIPT_ID];
+let contentScriptRegistrationPromise = null;
 const SPOOF_EXCLUDE_MATCHES = [
   '*://challenges.cloudflare.com/*',
   '*://*.cloudflare.com/cdn-cgi/challenge-platform/*'
@@ -47,7 +48,8 @@ const DEFAULT_WEBRTC_CONFIG = {
 const DEFAULT_FINGERPRINT_CONFIG = {
   enabled: true,
   fonts: true,
-  emoji: true,
+  webgl: true,
+  hardware: true,
   excludeCloudflare: true
 };
 const WEBRTC_POLICY_VALUES = {
@@ -101,28 +103,48 @@ async function unregisterSpoofContentScripts() {
 async function registerSpoofContentScripts() {
   if (!chrome.scripting || !chrome.scripting.registerContentScripts) return;
 
-  await unregisterSpoofContentScripts();
-  await chromeCall(chrome.scripting.registerContentScripts.bind(chrome.scripting), [
-    {
-      id: MAIN_CONTENT_SCRIPT_ID,
-      matches: ['<all_urls>'],
-      js: ['main_spoof.js'],
-      runAt: 'document_start',
-      allFrames: true,
-      world: 'MAIN',
-      excludeMatches: SPOOF_EXCLUDE_MATCHES,
-      persistAcrossSessions: true
-    },
-    {
-      id: BRIDGE_CONTENT_SCRIPT_ID,
-      matches: ['<all_urls>'],
-      js: ['content.js'],
-      runAt: 'document_start',
-      allFrames: true,
-      excludeMatches: SPOOF_EXCLUDE_MATCHES,
-      persistAcrossSessions: true
+  if (contentScriptRegistrationPromise) {
+    return contentScriptRegistrationPromise;
+  }
+
+  contentScriptRegistrationPromise = (async () => {
+    const scripts = [
+      {
+        id: MAIN_CONTENT_SCRIPT_ID,
+        matches: ['<all_urls>'],
+        js: ['main_spoof.js'],
+        runAt: 'document_start',
+        allFrames: true,
+        world: 'MAIN',
+        excludeMatches: SPOOF_EXCLUDE_MATCHES,
+        persistAcrossSessions: true
+      },
+      {
+        id: BRIDGE_CONTENT_SCRIPT_ID,
+        matches: ['<all_urls>'],
+        js: ['content.js'],
+        runAt: 'document_start',
+        allFrames: true,
+        excludeMatches: SPOOF_EXCLUDE_MATCHES,
+        persistAcrossSessions: true
+      }
+    ];
+
+    await unregisterSpoofContentScripts();
+    try {
+      await chromeCall(chrome.scripting.registerContentScripts.bind(chrome.scripting), scripts);
+    } catch (error) {
+      if (!/Duplicate script ID/i.test(error.message)) throw error;
+      await unregisterSpoofContentScripts();
+      await chromeCall(chrome.scripting.registerContentScripts.bind(chrome.scripting), scripts);
     }
-  ]);
+  })();
+
+  try {
+    await contentScriptRegistrationPromise;
+  } finally {
+    contentScriptRegistrationPromise = null;
+  }
 }
 
 function normalizeProxyConfig(config = {}) {
@@ -190,7 +212,8 @@ function normalizeFingerprintConfig(config = {}) {
   return {
     enabled: config.enabled !== false,
     fonts: config.fonts !== false,
-    emoji: config.emoji !== false,
+    webgl: config.webgl !== false,
+    hardware: config.hardware !== false,
     excludeCloudflare: config.excludeCloudflare !== false
   };
 }

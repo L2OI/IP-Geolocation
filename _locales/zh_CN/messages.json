@@ -45,7 +45,7 @@
     "message": "语言伪装"
   },
   "fingerprintSectionTitle": {
-    "message": "字体/Emoji 伪装"
+    "message": "环境指纹伪装"
   },
   "timezoneSectionTitle": {
     "message": "时区伪装"
@@ -83,8 +83,11 @@
   "labelFonts": {
     "message": "字体"
   },
-  "labelEmoji": {
-    "message": "Emoji"
+  "labelWebgl": {
+    "message": "WebGL"
+  },
+  "labelHardware": {
+    "message": "硬件"
   },
   "labelExcludeCloudflare": {
     "message": "排除 CF"
@@ -135,7 +138,7 @@
     "message": "语言状态加载中..."
   },
   "fingerprintLoading": {
-    "message": "字体/Emoji 状态加载中..."
+    "message": "环境指纹状态加载中..."
   },
   "timezoneLoading": {
     "message": "时区状态加载中..."
@@ -200,6 +203,9 @@
   "fingerprintFontsLabel": {
     "message": "字体"
   },
+  "fingerprintHardwareLabel": {
+    "message": "硬件"
+  },
   "fingerprintEnabledPrefix": {
     "message": "已启用"
   },
@@ -207,13 +213,13 @@
     "message": "已排除 CF"
   },
   "fingerprintDisabled": {
-    "message": "未启用字体/Emoji 伪装"
+    "message": "未启用环境指纹伪装"
   },
   "fingerprintReadFailed": {
-    "message": "读取字体/Emoji 配置失败"
+    "message": "读取环境指纹配置失败"
   },
   "fingerprintSaving": {
-    "message": "正在保存字体/Emoji 配置..."
+    "message": "正在保存环境指纹配置..."
   },
   "fingerprintSaveFailed": {
     "message": "保存失败"

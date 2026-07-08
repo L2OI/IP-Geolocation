@@ -20,7 +20,8 @@ const languagePresetEl = document.getElementById('language-preset');
 const saveLanguageBtn = document.getElementById('save-language-btn');
 const languageStatusEl = document.getElementById('language-status');
 const fingerprintFontsEnabledEl = document.getElementById('fingerprint-fonts-enabled');
-const fingerprintEmojiEnabledEl = document.getElementById('fingerprint-emoji-enabled');
+const fingerprintWebglEnabledEl = document.getElementById('fingerprint-webgl-enabled');
+const fingerprintHardwareEnabledEl = document.getElementById('fingerprint-hardware-enabled');
 const fingerprintExcludeCloudflareEl = document.getElementById('fingerprint-exclude-cloudflare');
 const saveFingerprintBtn = document.getElementById('save-fingerprint-btn');
 const fingerprintStatusEl = document.getElementById('fingerprint-status');
@@ -71,7 +72,8 @@ const DEFAULT_TIMEZONE_CONFIG = {
 const DEFAULT_FINGERPRINT_CONFIG = {
   enabled: true,
   fonts: true,
-  emoji: true,
+  webgl: true,
+  hardware: true,
   excludeCloudflare: true
 };
 const WEBRTC_STORAGE_KEY = 'webRtcConfig';
@@ -208,7 +210,8 @@ function setFeatureControlsEnabled(enabled) {
     languagePresetEl,
     saveLanguageBtn,
     fingerprintFontsEnabledEl,
-    fingerprintEmojiEnabledEl,
+    fingerprintWebglEnabledEl,
+    fingerprintHardwareEnabledEl,
     fingerprintExcludeCloudflareEl,
     saveFingerprintBtn,
     timezoneEnabledEl,
@@ -356,7 +359,8 @@ function normalizeFingerprintConfig(config) {
     ...(config || {}),
     enabled: config && config.enabled === false ? false : true,
     fonts: config && config.fonts === false ? false : true,
-    emoji: config && config.emoji === false ? false : true,
+    webgl: config && config.webgl === false ? false : true,
+    hardware: config && config.hardware === false ? false : true,
     excludeCloudflare: config && config.excludeCloudflare === false ? false : true
   };
 }
@@ -364,25 +368,29 @@ function normalizeFingerprintConfig(config) {
 function renderFingerprintConfig(config) {
   const normalized = normalizeFingerprintConfig(config);
   fingerprintFontsEnabledEl.checked = normalized.fonts !== false;
-  fingerprintEmojiEnabledEl.checked = normalized.emoji !== false;
+  fingerprintWebglEnabledEl.checked = normalized.webgl !== false;
+  fingerprintHardwareEnabledEl.checked = normalized.hardware !== false;
   fingerprintExcludeCloudflareEl.checked = normalized.excludeCloudflare !== false;
   const activeItems = [];
   if (normalized.fonts !== false) activeItems.push(t('fingerprintFontsLabel', '字体'));
-  if (normalized.emoji !== false) activeItems.push('Emoji');
+  if (normalized.webgl !== false) activeItems.push('WebGL');
+  if (normalized.hardware !== false) activeItems.push(t('fingerprintHardwareLabel', '硬件'));
   setFingerprintStatus(
     activeItems.length
       ? `${t('fingerprintEnabledPrefix', '已启用')}: ${activeItems.join(' / ')}${normalized.excludeCloudflare !== false ? `, ${t('fingerprintCloudflareExcluded', '已排除 CF')}` : ''}`
-      : t('fingerprintDisabled', '未启用字体/Emoji 伪装')
+      : t('fingerprintDisabled', '未启用环境指纹伪装')
   );
 }
 
 function readFingerprintForm() {
   const fonts = fingerprintFontsEnabledEl.checked;
-  const emoji = fingerprintEmojiEnabledEl.checked;
+  const webgl = fingerprintWebglEnabledEl.checked;
+  const hardware = fingerprintHardwareEnabledEl.checked;
   return {
-    enabled: fonts || emoji,
+    enabled: fonts || webgl || hardware,
     fonts,
-    emoji,
+    webgl,
+    hardware,
     excludeCloudflare: fingerprintExcludeCloudflareEl.checked
   };
 }
@@ -393,7 +401,7 @@ async function loadFingerprintConfig() {
     renderFingerprintConfig(response.config);
   } catch (error) {
     renderFingerprintConfig(DEFAULT_FINGERPRINT_CONFIG);
-    setFingerprintStatus(`${t('fingerprintReadFailed', '读取字体/Emoji 配置失败')}: ${error.message}`, true);
+    setFingerprintStatus(`${t('fingerprintReadFailed', '读取环境指纹配置失败')}: ${error.message}`, true);
   }
 }
 
@@ -588,7 +596,7 @@ saveLanguageBtn.addEventListener('click', async () => {
 
 saveFingerprintBtn.addEventListener('click', async () => {
   saveFingerprintBtn.disabled = true;
-  setFingerprintStatus(t('fingerprintSaving', '正在保存字体/Emoji 配置...'));
+  setFingerprintStatus(t('fingerprintSaving', '正在保存环境指纹配置...'));
   try {
     const response = await sendRuntimeMessage({
       action: 'setFingerprintConfig',

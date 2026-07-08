@@ -45,7 +45,7 @@
     "message": "Language Spoofing"
   },
   "fingerprintSectionTitle": {
-    "message": "Font/Emoji Spoofing"
+    "message": "Environment Fingerprint Spoofing"
   },
   "timezoneSectionTitle": {
     "message": "Timezone Spoofing"
@@ -83,8 +83,11 @@
   "labelFonts": {
     "message": "Fonts"
   },
-  "labelEmoji": {
-    "message": "Emoji"
+  "labelWebgl": {
+    "message": "WebGL"
+  },
+  "labelHardware": {
+    "message": "Hardware"
   },
   "labelExcludeCloudflare": {
     "message": "Exclude CF"
@@ -135,7 +138,7 @@
     "message": "Loading language status..."
   },
   "fingerprintLoading": {
-    "message": "Loading font/emoji status..."
+    "message": "Loading environment fingerprint status..."
   },
   "timezoneLoading": {
     "message": "Loading timezone status..."
@@ -200,6 +203,9 @@
   "fingerprintFontsLabel": {
     "message": "Fonts"
   },
+  "fingerprintHardwareLabel": {
+    "message": "Hardware"
+  },
   "fingerprintEnabledPrefix": {
     "message": "Enabled"
   },
@@ -207,13 +213,13 @@
     "message": "CF excluded"
   },
   "fingerprintDisabled": {
-    "message": "Font/emoji spoofing disabled"
+    "message": "Environment fingerprint spoofing disabled"
   },
   "fingerprintReadFailed": {
-    "message": "Failed to read font/emoji config"
+    "message": "Failed to read environment fingerprint config"
   },
   "fingerprintSaving": {
-    "message": "Saving font/emoji config..."
+    "message": "Saving environment fingerprint config..."
   },
   "fingerprintSaveFailed": {
     "message": "Save failed"

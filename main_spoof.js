@@ -33,13 +33,18 @@
     return {
       enabled: config.enabled !== false,
       fonts: config.fonts !== false,
-      emoji: config.emoji !== false,
+      webgl: config.webgl !== false,
+      hardware: config.hardware !== false,
       excludeCloudflare: config.excludeCloudflare !== false
     };
   }
 
-  function buildTimezonePatchSource(config) {
-    return `;(${installDateTimeSpoof.toString()})(${JSON.stringify(config)});`;
+  function buildWorkerPatchSource(timezoneConfig, fingerprintConfig) {
+    return [
+      `;(${installDateTimeSpoof.toString()})(${JSON.stringify(timezoneConfig)});`,
+      `;${normalizeFingerprintConfig.toString()};`,
+      `;(${installFingerprintSpoof.toString()})(${JSON.stringify(fingerprintConfig)});`
+    ].join('\n');
   }
 
   function installDateTimeSpoof(config) {
@@ -52,7 +57,15 @@
     const originals = root.__ipGeoOriginals || (root.__ipGeoOriginals = {
       Date: root.Date,
       DateTimeFormat: root.Intl && root.Intl.DateTimeFormat,
-      resolvedOptions: root.Intl && root.Intl.DateTimeFormat && root.Intl.DateTimeFormat.prototype.resolvedOptions,
+      DateTimeFormatResolvedOptions: root.Intl && root.Intl.DateTimeFormat && root.Intl.DateTimeFormat.prototype.resolvedOptions,
+      NumberFormat: root.Intl && root.Intl.NumberFormat,
+      NumberFormatResolvedOptions: root.Intl && root.Intl.NumberFormat && root.Intl.NumberFormat.prototype.resolvedOptions,
+      Collator: root.Intl && root.Intl.Collator,
+      CollatorResolvedOptions: root.Intl && root.Intl.Collator && root.Intl.Collator.prototype.resolvedOptions,
+      PluralRules: root.Intl && root.Intl.PluralRules,
+      PluralRulesResolvedOptions: root.Intl && root.Intl.PluralRules && root.Intl.PluralRules.prototype.resolvedOptions,
+      RelativeTimeFormat: root.Intl && root.Intl.RelativeTimeFormat,
+      RelativeTimeFormatResolvedOptions: root.Intl && root.Intl.RelativeTimeFormat && root.Intl.RelativeTimeFormat.prototype.resolvedOptions,
       dateToString: root.Date.prototype.toString,
       dateToDateString: root.Date.prototype.toDateString,
       dateToTimeString: root.Date.prototype.toTimeString,
@@ -66,7 +79,7 @@
     const OriginalDateTimeFormat = originals.DateTimeFormat;
     if (!OriginalDate || !OriginalDateTimeFormat) return;
 
-    const originalResolvedOptions = originals.resolvedOptions;
+    const originalDateTimeFormatResolvedOptions = originals.DateTimeFormatResolvedOptions;
     const originalGetTimezoneOffset = originals.getTimezoneOffset;
 
     const isWhoerPage = () => {
@@ -182,13 +195,40 @@
     SpoofedDateTimeFormat.supportedLocalesOf = OriginalDateTimeFormat.supportedLocalesOf.bind(OriginalDateTimeFormat);
     root.Intl.DateTimeFormat = SpoofedDateTimeFormat;
     root.Intl.DateTimeFormat.prototype.resolvedOptions = function() {
-      const options = originalResolvedOptions.call(this);
+      const options = originalDateTimeFormatResolvedOptions.call(this);
       return {
         ...options,
         locale: spoofLanguage || options.locale,
         timeZone: timezone || options.timeZone
       };
     };
+
+    const installLocaleConstructorSpoof = (name) => {
+      const OriginalConstructor = originals[name];
+      const originalResolvedOptions = originals[`${name}ResolvedOptions`];
+      if (!root.Intl || !OriginalConstructor || !originalResolvedOptions) return;
+
+      function SpoofedIntlConstructor(locales, options) {
+        return new OriginalConstructor(normalizeLocale(locales), options);
+      }
+      Object.setPrototypeOf(SpoofedIntlConstructor, OriginalConstructor);
+      SpoofedIntlConstructor.prototype = OriginalConstructor.prototype;
+      if (OriginalConstructor.supportedLocalesOf) {
+        SpoofedIntlConstructor.supportedLocalesOf = function(locales, options) {
+          return OriginalConstructor.supportedLocalesOf(normalizeLocale(locales), options);
+        };
+      }
+      root.Intl[name] = SpoofedIntlConstructor;
+      root.Intl[name].prototype.resolvedOptions = function() {
+        const options = originalResolvedOptions.call(this);
+        return {
+          ...options,
+          locale: spoofLanguage || options.locale
+        };
+      };
+    };
+
+    ['NumberFormat', 'Collator', 'PluralRules', 'RelativeTimeFormat'].forEach(installLocaleConstructorSpoof);
 
     if (timezone) {
       function SpoofedDate(...args) {
@@ -344,15 +384,21 @@
     if (root.__ipGeoFingerprintSpoofInstalled) return;
     root.__ipGeoFingerprintSpoofInstalled = true;
 
-    const cjkFontPattern = /(?:Microsoft\s+(?:YaHei(?:\s+UI)?|JhengHei)|SimSun|NSimSun|SimHei|KaiTi|FangSong|DengXian|MingLiU|PMingLiU|DFKai-SB|PingFang\s+(?:SC|TC|HK)|Hiragino\s+Sans\s+GB|Heiti\s+SC|STHeiti|STSong|STFangsong|Songti\s+SC|Noto\s+(?:Sans|Serif)\s+CJK\s+(?:SC|TC|CN|TW)|Source\s+Han\s+(?:Sans|Serif)\s+(?:CN|SC|TW)?|HarmonyOS\s+Sans\s+SC|WenQuanYi|Arial\s+Unicode\s+MS)/i;
-    const emojiFontPattern = /(?:Segoe\s+UI\s+Emoji|Apple\s+Color\s+Emoji|Noto\s+Color\s+Emoji|Twemoji|EmojiOne|Android\s+Emoji)/i;
-    const emojiTextPattern = /[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
+    const cjkFontPattern = /(?:Microsoft\s+(?:YaHei(?:\s+UI)?|JhengHei)|SimSun|NSimSun|SimHei|KaiTi|FangSong|DengXian|MingLiU|PMingLiU|DFKai-SB|PingFang\s*(?:SC|TC|HK)?|Hiragino\s+Sans\s+GB|Heiti\s+SC|ST(?:Heiti|Song|Fangsong|Kaiti|Xihei|Zhongsong|Xingkai|Liti|Xinwei)|Songti\s+SC|Noto\s+(?:Sans|Serif)(?:\s+CJK)?\s+(?:SC|TC|CN|TW|HK)|Source\s+Han\s+(?:Sans|Serif)\s+(?:CN|SC|TW|TC|HK)?|WenQuanYi|LXGW\s+WenKai|Sarasa\s+(?:Gothic|Mono|Term)|ZCOOL|Arial\s+Unicode\s+MS|[\u3400-\u9fff])/i;
+    const cjkVendorFontPattern = /(?:HarmonyOS\s+Sans|(?:HUAWEI|Huawei)\s+Sans|HONOR\s+Sans|Honor\s+Sans|MiSans|Xiaomi\s+Sans|MIUI|Mi\s+Lan\s+Pro|OPlus\s+Sans|OPPO\s+Sans|OnePlus\s+Sans|vivo\s*Sans|VivoSans|Alibaba\s+(?:PuHuiTi|Sans)|Ali(?:baba|mama)?\s*(?:PuHuiTi|Sans|FangYuanTi|ShuHeiTi)|DingTalk\s+(?:JinBuTi|Sans)|Tencent\s+Sans|WeChat\s+Sans|Douyin\s+Sans|Byte(?:Dance)?\s+(?:Sans|Font|Type)|ByteSans|Feishu\s+Sans|Lark\s+Sans)/i;
 
     const currentConfig = () => normalizeFingerprintConfig(root.__ipGeoFingerprintConfig || normalized);
-    const hasCjkFont = (font) => cjkFontPattern.test(String(font || ''));
-    const hasEmojiFont = (font) => emojiFontPattern.test(String(font || ''));
-    const hasEmojiText = (text) => emojiTextPattern.test(String(text || ''));
-    const sanitizeEmojiText = (text) => String(text).replace(emojiTextPattern, '\u25a1');
+    const SPOOF_WEBGL_VENDOR = 'Google Inc. (Intel)';
+    const SPOOF_WEBGL_RENDERER = 'ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)';
+    const SPOOF_HARDWARE = {
+      hardwareConcurrency: 8,
+      deviceMemory: 8,
+      maxTouchPoints: 0
+    };
+    const hasCjkFont = (font) => {
+      const value = String(font || '');
+      return cjkFontPattern.test(value) || cjkVendorFontPattern.test(value);
+    };
     const fallbackGenericFor = (font) => {
       const value = String(font || '');
       const genericMatch = value.match(/(?:^|,\s*)(monospace|sans-serif|serif|system-ui|cursive|fantasy)\s*$/i);
@@ -360,71 +406,62 @@
       const prefixMatch = value.match(/^(.*?\b\d+(?:\.\d+)?px(?:\/[^\s,]+)?\s*)/i);
       return `${prefixMatch ? prefixMatch[1] : '16px '}${generic}`;
     };
-    const spoofFont = (font, text) => {
+    const sanitizeFont = (font) => {
       const cfg = currentConfig();
-      let next = String(font || '');
-      if (cfg.fonts && hasCjkFont(next)) {
-        next = fallbackGenericFor(next);
-      }
-      if (cfg.emoji && (hasEmojiFont(next) || hasEmojiText(text))) {
-        next = next.replace(emojiFontPattern, 'Arial');
-        if (next === font || !next.trim()) {
-          const size = String(font || '').match(/\b\d+(?:\.\d+)?px\b/i);
-          next = `${size ? size[0] : '16px'} Arial`;
-        }
-      }
-      return next;
+      const next = String(font || '');
+      return cfg.fonts && hasCjkFont(next) ? fallbackGenericFor(next) : next;
+    };
+    const spoofFont = (font, text) => {
+      return sanitizeFont(font);
     };
 
-    const installFuckClaudeCompatibility = () => {
-      try {
-        const host = String((root.location && root.location.hostname) || '');
-        if (host !== 'fuck-claude.vercel.app') return;
-      } catch (error) {
-        return;
-      }
-
-      if (root.String && root.String.prototype && root.String.prototype.toLowerCase && !root.String.prototype.toLowerCase.__ipGeoFuckClaudePatched) {
-        const nativeToLowerCase = root.String.prototype.toLowerCase;
-        root.String.prototype.toLowerCase = function() {
+    try {
+      const patchWebGLPrototype = (WebGLPrototype) => {
+        if (!WebGLPrototype || !WebGLPrototype.getParameter || WebGLPrototype.__ipGeoWebGLPatched) return;
+        WebGLPrototype.__ipGeoWebGLPatched = true;
+        const nativeGetParameter = WebGLPrototype.getParameter;
+        WebGLPrototype.getParameter = function(parameter) {
           const cfg = currentConfig();
-          if (cfg.emoji) {
-            try {
-              const value = String(this);
-              const platform = String(root.navigator && root.navigator.platform || '');
-              const stack = String(new Error().stack || '');
-              if (value === platform && (stack.includes('Detector.astro_astro_type_script') || stack.includes('fuck-claude.vercel.app'))) {
-                throw new Error('emoji vendor probe blocked');
-              }
-            } catch (error) {
-              if (error && error.message === 'emoji vendor probe blocked') throw error;
-            }
+          if (cfg.webgl) {
+            if (parameter === 37445) return SPOOF_WEBGL_VENDOR;
+            if (parameter === 37446) return SPOOF_WEBGL_RENDERER;
           }
-          return nativeToLowerCase.apply(this, arguments);
+          return nativeGetParameter.call(this, parameter);
         };
-        root.String.prototype.toLowerCase.__ipGeoFuckClaudePatched = true;
-      }
+      };
+      patchWebGLPrototype(root.WebGLRenderingContext && root.WebGLRenderingContext.prototype);
+      patchWebGLPrototype(root.WebGL2RenderingContext && root.WebGL2RenderingContext.prototype);
+    } catch (error) {}
 
-      if (root.Math && root.Math.round && !root.Math.round.__ipGeoFuckClaudePatched) {
-        const nativeRound = root.Math.round;
-        root.Math.round = function(value) {
-          const cfg = currentConfig();
-          const numeric = Number(value);
-          if (cfg.emoji && Number.isFinite(numeric) && numeric >= 2 && numeric <= 4) {
-            try {
-              const stack = String(new Error().stack || '');
-              if (stack.includes('Detector.astro_astro_type_script') || stack.includes('fuck-claude.vercel.app')) {
-                return 0;
-              }
-            } catch (error) {}
-          }
-          return nativeRound.apply(this, arguments);
-        };
-        root.Math.round.__ipGeoFuckClaudePatched = true;
+    try {
+      const NavigatorPrototype = root.Navigator && root.Navigator.prototype
+        ? root.Navigator.prototype
+        : root.navigator
+          ? Object.getPrototypeOf(root.navigator)
+          : null;
+      if (NavigatorPrototype && !NavigatorPrototype.__ipGeoHardwarePatched) {
+        NavigatorPrototype.__ipGeoHardwarePatched = true;
+        ['hardwareConcurrency', 'deviceMemory', 'maxTouchPoints'].forEach((name) => {
+          const descriptor = Object.getOwnPropertyDescriptor(NavigatorPrototype, name)
+            || (root.navigator ? Object.getOwnPropertyDescriptor(root.navigator, name) : null);
+          const readNative = function(target) {
+            if (descriptor && descriptor.get) return descriptor.get.call(target);
+            if (descriptor && Object.prototype.hasOwnProperty.call(descriptor, 'value')) return descriptor.value;
+            return undefined;
+          };
+          try {
+            Object.defineProperty(NavigatorPrototype, name, {
+              get: function() {
+                const cfg = currentConfig();
+                return cfg.hardware ? SPOOF_HARDWARE[name] : readNative(this);
+              },
+              configurable: true,
+              enumerable: descriptor ? descriptor.enumerable : true
+            });
+          } catch (error) {}
+        });
       }
-    };
-
-    installFuckClaudeCompatibility();
+    } catch (error) {}
 
     try {
       const FontFaceSetPrototype = root.FontFaceSet && root.FontFaceSet.prototype
@@ -438,7 +475,6 @@
           value: function(font, text) {
           const cfg = currentConfig();
           if (cfg.fonts && hasCjkFont(font)) return false;
-          if (cfg.emoji && (hasEmojiFont(font) || hasEmojiText(text))) return false;
           return nativeCheck.call(this, font, text);
           },
           configurable: true,
@@ -449,21 +485,38 @@
     } catch (error) {}
 
     try {
-      const CanvasPrototype = root.CanvasRenderingContext2D && root.CanvasRenderingContext2D.prototype;
-      if (CanvasPrototype && !CanvasPrototype.__ipGeoFontEmojiPatched) {
-        CanvasPrototype.__ipGeoFontEmojiPatched = true;
+      const CanvasPrototypes = Array.from(new Set([
+        root.CanvasRenderingContext2D && root.CanvasRenderingContext2D.prototype,
+        root.OffscreenCanvasRenderingContext2D && root.OffscreenCanvasRenderingContext2D.prototype
+      ].filter(Boolean)));
+      CanvasPrototypes.forEach((CanvasPrototype) => {
+      if (CanvasPrototype && !CanvasPrototype.__ipGeoFontPatched) {
+        CanvasPrototype.__ipGeoFontPatched = true;
+        const fontDescriptor = Object.getOwnPropertyDescriptor(CanvasPrototype, 'font');
         const nativeMeasureText = CanvasPrototype.measureText;
         const nativeFillText = CanvasPrototype.fillText;
         const nativeStrokeText = CanvasPrototype.strokeText;
+
+        if (fontDescriptor && fontDescriptor.get && fontDescriptor.set) {
+          Object.defineProperty(CanvasPrototype, 'font', {
+            get: function() {
+              return sanitizeFont(fontDescriptor.get.call(this));
+            },
+            set: function(value) {
+              return fontDescriptor.set.call(this, sanitizeFont(value));
+            },
+            configurable: true,
+            enumerable: fontDescriptor.enumerable
+          });
+        }
 
         const withSpoofedCanvasText = (context, text, callback) => {
           const cfg = currentConfig();
           const originalFont = context.font;
           const nextFont = spoofFont(originalFont, text);
-          const nextText = cfg.emoji && hasEmojiText(text) ? sanitizeEmojiText(text) : text;
           try {
             if (nextFont && nextFont !== originalFont) context.font = nextFont;
-            return callback(nextText);
+            return callback(text);
           } finally {
             if (context.font !== originalFont) context.font = originalFont;
           }
@@ -479,6 +532,7 @@
           return withSpoofedCanvasText(this, text, (nextText) => nativeStrokeText.call(this, nextText, ...args));
         };
       }
+      });
     } catch (error) {}
 
     try {
@@ -553,8 +607,8 @@
       language: spoofLanguage
     };
     installDateTimeSpoof(patchConfig);
-    installWorkerHooks(buildTimezonePatchSource(patchConfig));
     installFingerprintSpoof(fingerprintConfig);
+    installWorkerHooks(buildWorkerPatchSource(patchConfig, fingerprintConfig));
   }
 
   window.addEventListener('message', (event) => {
