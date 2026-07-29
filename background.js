@@ -13,17 +13,29 @@ const PROXY_STORAGE_KEY = 'proxyConfig';
 const LANGUAGE_STORAGE_KEY = 'languageConfig';
 const WEBRTC_STORAGE_KEY = 'webRtcConfig';
 const TIMEZONE_STORAGE_KEY = 'timezoneConfig';
-const FINGERPRINT_STORAGE_KEY = 'fingerprintConfig';
+const SITE_SCOPE_STORAGE_KEY = 'siteScopeConfig';
 const EXTENSION_ENABLED_KEY = 'extensionEnabled';
 const LANGUAGE_RULE_ID = 1001;
-const MAIN_CONTENT_SCRIPT_ID = 'ipgeo-main-spoof';
-const BRIDGE_CONTENT_SCRIPT_ID = 'ipgeo-bridge';
-const CONTENT_SCRIPT_IDS = [MAIN_CONTENT_SCRIPT_ID, BRIDGE_CONTENT_SCRIPT_ID];
-let contentScriptRegistrationPromise = null;
-const SPOOF_EXCLUDE_MATCHES = [
-  '*://challenges.cloudflare.com/*',
-  '*://*.cloudflare.com/cdn-cgi/challenge-platform/*'
+const LANGUAGE_SESSION_RULE_ID = 1002;
+const LEGACY_CONTENT_SCRIPT_IDS = ['ipgeo-main-spoof', 'ipgeo-bridge'];
+const DEBUGGER_PROTOCOL_VERSION = '1.3';
+const DEBUGGER_TARGET_FILTER = [
+  { type: 'iframe', exclude: false },
+  { type: 'worker', exclude: false },
+  { type: 'shared_worker', exclude: false },
+  { exclude: true }
 ];
+const attachedTabIds = new Set();
+const attachingTabs = new Map();
+const reconcilingTabs = new Map();
+const pendingNativeReloadTabs = new Set();
+const blockedDebuggerTabs = new Set();
+const childSessionsByTab = new Map();
+const nativeIdentityByTab = new Map();
+const debuggerStateByTab = new Map();
+const directlyAttachedWorkerTargets = new Map();
+let workerTargetScanTimer = null;
+let languageRuleUpdateQueue = Promise.resolve();
 const DEFAULT_PROXY_CONFIG = {
   enabled: false,
   scheme: 'http',
@@ -42,15 +54,12 @@ const DEFAULT_TIMEZONE_CONFIG = {
   mode: 'auto',
   timezone: ''
 };
+const DEFAULT_SITE_SCOPE_CONFIG = {
+  mode: 'all',
+  domains: []
+};
 const DEFAULT_WEBRTC_CONFIG = {
   globalMode: 'strict'
-};
-const DEFAULT_FINGERPRINT_CONFIG = {
-  enabled: true,
-  fonts: true,
-  webgl: true,
-  hardware: true,
-  excludeCloudflare: true
 };
 const WEBRTC_POLICY_VALUES = {
   strict: 'disable_non_proxied_udp',
@@ -78,6 +87,11 @@ async function removeLanguageHeaderRules() {
   await chromeCall(chrome.declarativeNetRequest.updateDynamicRules.bind(chrome.declarativeNetRequest), {
     removeRuleIds: [LANGUAGE_RULE_ID]
   });
+  if (chrome.declarativeNetRequest.updateSessionRules) {
+    await chromeCall(chrome.declarativeNetRequest.updateSessionRules.bind(chrome.declarativeNetRequest), {
+      removeRuleIds: [LANGUAGE_SESSION_RULE_ID]
+    });
+  }
 }
 
 async function clearProxySettings() {
@@ -91,59 +105,12 @@ async function unregisterSpoofContentScripts() {
   if (!chrome.scripting || !chrome.scripting.unregisterContentScripts) return;
   try {
     await chromeCall(chrome.scripting.unregisterContentScripts.bind(chrome.scripting), {
-      ids: CONTENT_SCRIPT_IDS
+      ids: LEGACY_CONTENT_SCRIPT_IDS
     });
   } catch (error) {
     if (!/non[- ]?existent|not found|does not exist/i.test(error.message)) {
       console.warn('Content script unregister failed:', error.message);
     }
-  }
-}
-
-async function registerSpoofContentScripts() {
-  if (!chrome.scripting || !chrome.scripting.registerContentScripts) return;
-
-  if (contentScriptRegistrationPromise) {
-    return contentScriptRegistrationPromise;
-  }
-
-  contentScriptRegistrationPromise = (async () => {
-    const scripts = [
-      {
-        id: MAIN_CONTENT_SCRIPT_ID,
-        matches: ['<all_urls>'],
-        js: ['main_spoof.js'],
-        runAt: 'document_start',
-        allFrames: true,
-        world: 'MAIN',
-        excludeMatches: SPOOF_EXCLUDE_MATCHES,
-        persistAcrossSessions: true
-      },
-      {
-        id: BRIDGE_CONTENT_SCRIPT_ID,
-        matches: ['<all_urls>'],
-        js: ['content.js'],
-        runAt: 'document_start',
-        allFrames: true,
-        excludeMatches: SPOOF_EXCLUDE_MATCHES,
-        persistAcrossSessions: true
-      }
-    ];
-
-    await unregisterSpoofContentScripts();
-    try {
-      await chromeCall(chrome.scripting.registerContentScripts.bind(chrome.scripting), scripts);
-    } catch (error) {
-      if (!/Duplicate script ID/i.test(error.message)) throw error;
-      await unregisterSpoofContentScripts();
-      await chromeCall(chrome.scripting.registerContentScripts.bind(chrome.scripting), scripts);
-    }
-  })();
-
-  try {
-    await contentScriptRegistrationPromise;
-  } finally {
-    contentScriptRegistrationPromise = null;
   }
 }
 
@@ -208,13 +175,32 @@ function normalizeTimezoneConfig(config = {}) {
   };
 }
 
-function normalizeFingerprintConfig(config = {}) {
+function normalizeDomainEntry(value) {
+  let input = String(value || '').trim().toLowerCase();
+  if (!input) return '';
+
+  input = input.replace(/^([a-z][a-z\d+.-]*:\/\/)\*\./i, '$1');
+  input = input.replace(/^\*\./, '').replace(/^\./, '');
+  try {
+    const parsed = new URL(input.includes('://') ? input : `http://${input}`);
+    return parsed.hostname.toLowerCase().replace(/\.$/, '');
+  } catch (error) {
+    return '';
+  }
+}
+
+function normalizeSiteScopeConfig(config = {}) {
+  let domains = config.domains;
+  if (typeof domains === 'string') {
+    domains = domains.split(/[\s,]+/);
+  }
+  if (!Array.isArray(domains)) {
+    domains = [];
+  }
+
   return {
-    enabled: config.enabled !== false,
-    fonts: config.fonts !== false,
-    webgl: config.webgl !== false,
-    hardware: config.hardware !== false,
-    excludeCloudflare: config.excludeCloudflare !== false
+    mode: config.mode === 'custom' ? 'custom' : 'all',
+    domains: [...new Set(domains.map(normalizeDomainEntry).filter(Boolean))]
   };
 }
 
@@ -245,42 +231,627 @@ function resolveTimezone(location, config = {}) {
   };
 }
 
-async function applyLanguageHeaderRules(config, extensionEnabled = true) {
+function debuggerSendCommand(session, method, params = {}) {
+  return new Promise((resolve, reject) => {
+    chrome.debugger.sendCommand(session, method, params, (result) => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        reject(new Error(error.message));
+        return;
+      }
+      resolve(result || {});
+    });
+  });
+}
+
+function setDebuggerState(tabId, status, message = '') {
+  const state = {
+    status,
+    message,
+    updatedAt: new Date().toISOString()
+  };
+  debuggerStateByTab.set(tabId, state);
+  return state;
+}
+
+function isAttachableUrl(url) {
+  return /^https?:\/\//i.test(String(url || ''));
+}
+
+function isUrlInSiteScope(url, config) {
+  if (!isAttachableUrl(url)) return false;
+
+  const normalized = normalizeSiteScopeConfig(config);
+  if (normalized.mode === 'all') return true;
+
+  try {
+    const hostname = new URL(url).hostname.toLowerCase().replace(/\.$/, '');
+    return normalized.domains.some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
+  } catch (error) {
+    return false;
+  }
+}
+
+async function getSiteScopeConfig() {
+  const data = await chrome.storage.local.get(SITE_SCOPE_STORAGE_KEY);
+  return normalizeSiteScopeConfig(data[SITE_SCOPE_STORAGE_KEY] || DEFAULT_SITE_SCOPE_CONFIG);
+}
+
+async function isTabUrlInSiteScope(url, config = null) {
+  const siteScope = config || await getSiteScopeConfig();
+  return isUrlInSiteScope(url, siteScope);
+}
+
+function languageToLocale(language) {
+  return String(language || '').replace(/-/g, '_');
+}
+
+async function getEnvironmentProfile() {
+  const data = await chrome.storage.local.get([
+    'lastLocation',
+    LANGUAGE_STORAGE_KEY,
+    TIMEZONE_STORAGE_KEY
+  ]);
+  const languageConfig = normalizeLanguageConfig(data[LANGUAGE_STORAGE_KEY] || DEFAULT_LANGUAGE_CONFIG);
+  const timezoneState = resolveTimezone(data.lastLocation, data[TIMEZONE_STORAGE_KEY] || DEFAULT_TIMEZONE_CONFIG);
+  const nativeLanguages = Array.isArray(navigator.languages) && navigator.languages.length
+    ? [...navigator.languages]
+    : [navigator.language || DEFAULT_LANGUAGE_CONFIG.language];
+  const languages = languageConfig.enabled ? languageConfig.languages : nativeLanguages;
+  const language = languages[0] || navigator.language || DEFAULT_LANGUAGE_CONFIG.language;
+  const latitude = Number(data.lastLocation && data.lastLocation.latitude);
+  const longitude = Number(data.lastLocation && data.lastLocation.longitude);
+  const hasLocation = Number.isFinite(latitude) && Number.isFinite(longitude);
+
+  return {
+    language,
+    languages,
+    browserAcceptLanguage: languages.join(','),
+    locale: languageToLocale(language),
+    timezone: timezoneState.timezone || '',
+    location: hasLocation
+      ? {
+          latitude,
+          longitude,
+          accuracy: 1000
+        }
+      : null,
+    country: data.lastLocation && data.lastLocation.country ? data.lastLocation.country : null
+  };
+}
+
+async function readNativeIdentity(tabId, session) {
+  if (nativeIdentityByTab.has(tabId)) {
+    return nativeIdentityByTab.get(tabId);
+  }
+
+  const fallback = {
+    userAgent: navigator.userAgent,
+    platform: navigator.platform || '',
+    userAgentMetadata: null
+  };
+
+  try {
+    const response = await debuggerSendCommand(session, 'Runtime.evaluate', {
+      expression: `(async () => {
+        const uaData = navigator.userAgentData;
+        let high = {};
+        if (uaData && typeof uaData.getHighEntropyValues === 'function') {
+          try {
+            high = await uaData.getHighEntropyValues([
+              'architecture',
+              'bitness',
+              'formFactors',
+              'fullVersionList',
+              'model',
+              'platformVersion',
+              'uaFullVersion',
+              'wow64'
+            ]);
+          } catch (error) {}
+        }
+        return {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform || '',
+          userAgentMetadata: uaData ? {
+            brands: Array.isArray(uaData.brands) ? uaData.brands : [],
+            fullVersionList: Array.isArray(high.fullVersionList) ? high.fullVersionList : [],
+            fullVersion: high.uaFullVersion || '',
+            platform: uaData.platform || '',
+            platformVersion: high.platformVersion || '',
+            architecture: high.architecture || '',
+            model: high.model || '',
+            mobile: Boolean(uaData.mobile),
+            bitness: high.bitness || '',
+            wow64: Boolean(high.wow64),
+            formFactors: Array.isArray(high.formFactors) ? high.formFactors : []
+          } : null
+        };
+      })()`,
+      awaitPromise: true,
+      returnByValue: true
+    });
+    const value = response && response.result ? response.result.value : null;
+    if (value && value.userAgent) {
+      nativeIdentityByTab.set(tabId, value);
+      return value;
+    }
+  } catch (error) {
+    console.warn(`Native identity read failed for tab ${tabId}:`, error.message);
+  }
+
+  nativeIdentityByTab.set(tabId, fallback);
+  return fallback;
+}
+
+async function sendEnvironmentCommand(session, method, params, failures) {
+  try {
+    await debuggerSendCommand(session, method, params);
+    return true;
+  } catch (error) {
+    failures.push(`${method}: ${error.message}`);
+    return false;
+  }
+}
+
+function normalizeLocaleForComparison(locale) {
+  const normalized = String(locale || '').trim().replace(/_/g, '-');
+  if (!normalized) return '';
+  try {
+    return Intl.getCanonicalLocales(normalized)[0].toLowerCase();
+  } catch (error) {
+    return normalized.toLowerCase();
+  }
+}
+
+async function sendLocaleOverride(session, locale, failures) {
+  try {
+    await debuggerSendCommand(session, 'Emulation.setLocaleOverride', { locale });
+    return true;
+  } catch (error) {
+    if (!/another locale override is already in effect/i.test(error.message)) {
+      failures.push(`Emulation.setLocaleOverride: ${error.message}`);
+      return false;
+    }
+
+    try {
+      const response = await debuggerSendCommand(session, 'Runtime.evaluate', {
+        expression: 'Intl.DateTimeFormat().resolvedOptions().locale',
+        returnByValue: true
+      });
+      const actualLocale = response && response.result ? response.result.value : '';
+      if (normalizeLocaleForComparison(actualLocale) === normalizeLocaleForComparison(locale)) {
+        return true;
+      }
+      failures.push(
+        `Emulation.setLocaleOverride: existing locale ${actualLocale || 'unknown'} does not match ${locale}`
+      );
+    } catch (verificationError) {
+      failures.push(`Emulation.setLocaleOverride: ${error.message}; verification failed: ${verificationError.message}`);
+    }
+    return false;
+  }
+}
+
+async function configureDebuggerSession(session, profile, identity, options = {}) {
+  const failures = [];
+
+  if (options.autoAttach !== false) {
+    await sendEnvironmentCommand(session, 'Target.setAutoAttach', {
+      autoAttach: true,
+      waitForDebuggerOnStart: true,
+      flatten: true,
+      filter: DEBUGGER_TARGET_FILTER
+    }, failures);
+  }
+
+  await sendEnvironmentCommand(session, 'Emulation.setTimezoneOverride', {
+    timezoneId: profile.timezone
+  }, failures);
+
+  await sendLocaleOverride(session, profile.locale, failures);
+
+  const userAgentParams = {
+    userAgent: identity.userAgent,
+    acceptLanguage: profile.browserAcceptLanguage,
+    platform: identity.platform
+  };
+  if (identity.userAgentMetadata) {
+    userAgentParams.userAgentMetadata = identity.userAgentMetadata;
+  }
+  await sendEnvironmentCommand(session, 'Emulation.setUserAgentOverride', userAgentParams, failures);
+  await sendEnvironmentCommand(session, 'Network.setUserAgentOverride', userAgentParams, failures);
+
+  if (profile.location) {
+    await sendEnvironmentCommand(session, 'Emulation.setGeolocationOverride', profile.location, failures);
+  } else {
+    await sendEnvironmentCommand(session, 'Emulation.clearGeolocationOverride', {}, failures);
+  }
+
+  if (options.resume) {
+    await sendEnvironmentCommand(session, 'Runtime.runIfWaitingForDebugger', {}, failures);
+  }
+
+  return failures;
+}
+
+async function hasOwnDebuggerSession(tabId) {
+  try {
+    await debuggerSendCommand({ tabId }, 'Runtime.evaluate', {
+      expression: 'void 0',
+      returnByValue: true
+    });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function ensureDebuggerAttached(tabId, options = {}) {
+  if (attachingTabs.has(tabId)) {
+    return attachingTabs.get(tabId);
+  }
+
+  const task = (async () => {
+    if (blockedDebuggerTabs.has(tabId) && !options.force) {
+      return setDebuggerState(tabId, 'blocked', '调试会话已被用户或 DevTools 断开');
+    }
+
+    const tab = await chrome.tabs.get(tabId);
+    const targetUrl = options.url || tab.pendingUrl || tab.url;
+    if (!isAttachableUrl(targetUrl)) {
+      return setDebuggerState(tabId, 'unsupported', '当前页面不支持统一环境模式');
+    }
+    const siteScope = options.siteScope || await getSiteScopeConfig();
+    if (!isUrlInSiteScope(targetUrl, siteScope)) {
+      return setDebuggerState(tabId, 'excluded', '当前域名未启用隐藏');
+    }
+
+    setDebuggerState(tabId, 'attaching', '正在附加统一环境');
+    let alreadyAttached = attachedTabIds.has(tabId) || await hasOwnDebuggerSession(tabId);
+    if (!alreadyAttached) {
+      await chromeCall(chrome.debugger.attach.bind(chrome.debugger), { tabId }, DEBUGGER_PROTOCOL_VERSION);
+      alreadyAttached = false;
+    }
+
+    attachedTabIds.add(tabId);
+    blockedDebuggerTabs.delete(tabId);
+    if (!childSessionsByTab.has(tabId)) {
+      childSessionsByTab.set(tabId, new Set());
+    }
+
+    const session = { tabId };
+    const identity = await readNativeIdentity(tabId, session);
+    const profile = await getEnvironmentProfile();
+    const failures = await configureDebuggerSession(session, profile, identity);
+    if (failures.length) {
+      console.warn(`Environment setup warnings for tab ${tabId}:`, failures.join(' | '));
+    }
+
+    const state = setDebuggerState(
+      tabId,
+      'attached',
+      failures.length ? `已附加，部分子能力不可用: ${failures.join(' | ')}` : '统一环境已附加'
+    );
+    ensureWorkerTargetScanner();
+
+    if (!alreadyAttached && options.reloadOnAttach) {
+      await chrome.tabs.reload(tabId);
+    }
+
+    return state;
+  })().catch((error) => {
+    const message = error && error.message ? error.message : String(error);
+    if (/another debugger|already attached|cannot access|not allowed/i.test(message)) {
+      blockedDebuggerTabs.add(tabId);
+    }
+    return setDebuggerState(tabId, 'error', message);
+  }).finally(() => {
+    attachingTabs.delete(tabId);
+  });
+
+  attachingTabs.set(tabId, task);
+  return task;
+}
+
+function clearDebuggerTabState(tabId) {
+  attachedTabIds.delete(tabId);
+  childSessionsByTab.delete(tabId);
+  nativeIdentityByTab.delete(tabId);
+  for (const [targetId, ownerTabId] of directlyAttachedWorkerTargets) {
+    if (ownerTabId === tabId) {
+      directlyAttachedWorkerTargets.delete(targetId);
+    }
+  }
+  stopWorkerTargetScannerIfIdle();
+}
+
+async function scanUnattachedWorkerTargets() {
+  if (!attachedTabIds.size) return;
+
+  const tabOrigins = new Map();
+  for (const tabId of attachedTabIds) {
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      const url = new URL(tab.url || tab.pendingUrl || '');
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        tabOrigins.set(tabId, url.origin);
+      }
+    } catch (error) {}
+  }
+
+  const targets = await chrome.debugger.getTargets();
+  for (const target of targets) {
+    if (target.type !== 'worker' || target.attached || directlyAttachedWorkerTargets.has(target.id)) continue;
+
+    let targetOrigin = '';
+    try {
+      targetOrigin = new URL(target.url).origin;
+    } catch (error) {
+      continue;
+    }
+    const owner = [...tabOrigins.entries()].find(([, origin]) => origin === targetOrigin);
+    if (!owner) continue;
+
+    const [tabId] = owner;
+    try {
+      const targetSession = { targetId: target.id };
+      await chromeCall(chrome.debugger.attach.bind(chrome.debugger), targetSession, DEBUGGER_PROTOCOL_VERSION);
+      directlyAttachedWorkerTargets.set(target.id, tabId);
+      const identity = await readNativeIdentity(tabId, { tabId });
+      const profile = await getEnvironmentProfile();
+      const failures = await configureDebuggerSession(targetSession, profile, identity, { autoAttach: false });
+      if (failures.length) {
+        console.warn(`Direct worker setup warnings for ${target.id}:`, failures.join(' | '));
+      }
+    } catch (error) {
+      if (!/another debugger|already attached|target closed/i.test(error.message)) {
+        console.warn(`Direct worker attach failed for ${target.id}:`, error.message);
+      }
+    }
+  }
+}
+
+function ensureWorkerTargetScanner() {
+  if (workerTargetScanTimer || !attachedTabIds.size) return;
+  workerTargetScanTimer = setInterval(() => {
+    scanUnattachedWorkerTargets().catch(error => {
+      console.warn('Worker target scan failed:', error.message);
+    });
+  }, 100);
+  scanUnattachedWorkerTargets().catch(error => {
+    console.warn('Worker target scan failed:', error.message);
+  });
+}
+
+function stopWorkerTargetScannerIfIdle() {
+  if (attachedTabIds.size || !workerTargetScanTimer) return;
+  clearInterval(workerTargetScanTimer);
+  workerTargetScanTimer = null;
+}
+
+async function detachDebuggerTab(tabId) {
+  try {
+    if (attachedTabIds.has(tabId) || await hasOwnDebuggerSession(tabId)) {
+      await chromeCall(chrome.debugger.detach.bind(chrome.debugger), { tabId });
+    }
+  } catch (error) {
+    if (!/not attached|no tab/i.test(error.message)) {
+      console.warn(`Debugger detach failed for tab ${tabId}:`, error.message);
+    }
+  } finally {
+    clearDebuggerTabState(tabId);
+    setDebuggerState(tabId, 'detached', '统一环境未附加');
+  }
+}
+
+async function detachAllDebuggerTabs() {
+  for (const targetId of [...directlyAttachedWorkerTargets.keys()]) {
+    try {
+      await chromeCall(chrome.debugger.detach.bind(chrome.debugger), { targetId });
+    } catch (error) {}
+    directlyAttachedWorkerTargets.delete(targetId);
+  }
+  for (const tabId of [...attachedTabIds]) {
+    await detachDebuggerTab(tabId);
+  }
+  stopWorkerTargetScannerIfIdle();
+}
+
+async function reconcileTabEnvironment(tabId, targetUrl, options = {}) {
+  const previous = reconcilingTabs.get(tabId) || Promise.resolve();
+  const task = previous.catch(() => {}).then(async () => {
+    const siteScope = options.siteScope || await getSiteScopeConfig();
+    const attached = attachedTabIds.has(tabId) || await hasOwnDebuggerSession(tabId);
+
+    if (!isAttachableUrl(targetUrl)) {
+      if (attached) await detachDebuggerTab(tabId);
+      return setDebuggerState(tabId, 'unsupported', '当前页面不支持统一环境模式');
+    }
+
+    if (!options.skipHeaderSync) {
+      await syncLanguageHeaderRulesFromStorage(siteScope);
+    }
+    if (isUrlInSiteScope(targetUrl, siteScope)) {
+      pendingNativeReloadTabs.delete(tabId);
+      return ensureDebuggerAttached(tabId, {
+        url: targetUrl,
+        siteScope,
+        reloadOnAttach: options.reloadOnAttach !== false
+      });
+    }
+
+    if (attached) {
+      await detachDebuggerTab(tabId);
+      if (options.reloadOnDetach !== false) {
+        if (options.deferReloadOnDetach) {
+          pendingNativeReloadTabs.add(tabId);
+        } else {
+          await chrome.tabs.reload(tabId);
+        }
+      }
+    }
+    return setDebuggerState(tabId, 'excluded', '当前域名未启用隐藏');
+  }).finally(() => {
+    if (reconcilingTabs.get(tabId) === task) {
+      reconcilingTabs.delete(tabId);
+    }
+  });
+
+  reconcilingTabs.set(tabId, task);
+  return task;
+}
+
+async function attachEligibleTabs(reloadOnAttach = false) {
+  const siteScope = await getSiteScopeConfig();
+  await syncLanguageHeaderRulesFromStorage(siteScope);
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    const targetUrl = tab.pendingUrl || tab.url;
+    if (Number.isInteger(tab.id) && isAttachableUrl(targetUrl)) {
+      await reconcileTabEnvironment(tab.id, targetUrl, {
+        siteScope,
+        reloadOnAttach,
+        reloadOnDetach: false,
+        skipHeaderSync: true
+      });
+    }
+  }
+}
+
+async function reconcileAllTabs(siteScope, reload = true) {
+  await syncLanguageHeaderRulesFromStorage(siteScope);
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (!Number.isInteger(tab.id)) continue;
+    await reconcileTabEnvironment(tab.id, tab.pendingUrl || tab.url, {
+      siteScope,
+      reloadOnAttach: reload,
+      reloadOnDetach: reload,
+      skipHeaderSync: true
+    });
+  }
+}
+
+async function refreshDebuggerEnvironment(options = {}) {
+  const profile = await getEnvironmentProfile();
+  let refreshed = 0;
+
+  for (const tabId of [...attachedTabIds]) {
+    try {
+      const session = { tabId };
+      const identity = await readNativeIdentity(tabId, session);
+      await configureDebuggerSession(session, profile, identity);
+
+      if (options.reload) {
+        await chrome.tabs.reload(tabId);
+      } else {
+        const childSessions = childSessionsByTab.get(tabId) || new Set();
+        for (const sessionId of [...childSessions]) {
+          await configureDebuggerSession({ tabId, sessionId }, profile, identity);
+        }
+      }
+      refreshed += 1;
+    } catch (error) {
+      console.warn(`Environment refresh failed for tab ${tabId}:`, error.message);
+      clearDebuggerTabState(tabId);
+      setDebuggerState(tabId, 'error', error.message);
+    }
+  }
+
+  return refreshed;
+}
+
+async function getEnvironmentStatus(tabId) {
+  if (!Number.isInteger(tabId)) {
+    return {
+      status: 'unsupported',
+      message: '未找到当前标签页',
+      profile: await getEnvironmentProfile()
+    };
+  }
+
+  const tab = await chrome.tabs.get(tabId);
+  const targetUrl = tab.pendingUrl || tab.url;
+  if (isAttachableUrl(targetUrl) && !await isTabUrlInSiteScope(targetUrl)) {
+    return {
+      status: 'excluded',
+      message: '当前域名未启用隐藏',
+      attached: false,
+      profile: await getEnvironmentProfile()
+    };
+  }
+
+  const attached = attachedTabIds.has(tabId) || await hasOwnDebuggerSession(tabId);
+  if (attached) {
+    attachedTabIds.add(tabId);
+  }
+  const state = debuggerStateByTab.get(tabId) || {
+    status: attached ? 'attached' : 'detached',
+    message: attached ? '统一环境已附加' : '统一环境未附加'
+  };
+
+  return {
+    ...state,
+    attached,
+    profile: await getEnvironmentProfile()
+  };
+}
+
+async function applyLanguageHeaderRules(config, extensionEnabled = true, siteScopeConfig = null) {
   const normalized = normalizeLanguageConfig(config);
   if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateDynamicRules) {
     return normalized;
   }
 
-  const update = { removeRuleIds: [LANGUAGE_RULE_ID] };
-  if (extensionEnabled && normalized.enabled) {
-    update.addRules = [{
-      id: LANGUAGE_RULE_ID,
-      priority: 1,
-      action: {
-        type: 'modifyHeaders',
-        requestHeaders: [{
-          header: 'Accept-Language',
-          operation: 'set',
-          value: normalized.acceptLanguage
-        }]
-      },
-      condition: {
-        urlFilter: '|http',
-        resourceTypes: [
-          'main_frame',
-          'sub_frame',
-          'xmlhttprequest',
-          'script',
-          'stylesheet',
-          'image',
-          'font',
-          'other'
-        ]
-      }
-    }];
+  await removeLanguageHeaderRules();
+  if (!extensionEnabled || !normalized.enabled) return normalized;
+
+  const siteScope = normalizeSiteScopeConfig(siteScopeConfig || await getSiteScopeConfig());
+  const condition = {
+    urlFilter: '|http',
+    resourceTypes: [
+      'main_frame',
+      'sub_frame',
+      'xmlhttprequest',
+      'script',
+      'stylesheet',
+      'image',
+      'font',
+      'other'
+    ]
+  };
+  const rule = {
+    id: siteScope.mode === 'custom' ? LANGUAGE_SESSION_RULE_ID : LANGUAGE_RULE_ID,
+    priority: 1,
+    action: {
+      type: 'modifyHeaders',
+      requestHeaders: [{
+        header: 'Accept-Language',
+        operation: 'set',
+        value: normalized.acceptLanguage
+      }]
+    },
+    condition
+  };
+
+  if (siteScope.mode === 'all') {
+    await chromeCall(chrome.declarativeNetRequest.updateDynamicRules.bind(chrome.declarativeNetRequest), {
+      addRules: [rule]
+    });
+    return normalized;
   }
 
-  await chromeCall(chrome.declarativeNetRequest.updateDynamicRules.bind(chrome.declarativeNetRequest), update);
+  const tabs = await chrome.tabs.query({});
+  const tabIds = tabs
+    .filter(tab => Number.isInteger(tab.id) && isUrlInSiteScope(tab.pendingUrl || tab.url, siteScope))
+    .map(tab => tab.id);
+  if (tabIds.length && chrome.declarativeNetRequest.updateSessionRules) {
+    rule.condition = { ...condition, tabIds };
+    await chromeCall(chrome.declarativeNetRequest.updateSessionRules.bind(chrome.declarativeNetRequest), {
+      addRules: [rule]
+    });
+  }
   return normalized;
 }
 
@@ -460,6 +1031,11 @@ async function saveAndApplyProxyConfig(config) {
   const normalized = normalizeProxyConfig(config);
   await chrome.storage.local.set({ [PROXY_STORAGE_KEY]: normalized });
   await applyProxySettings(normalized);
+  if (await getExtensionEnabled()) {
+    updateGeolocation(true).catch(error => {
+      console.warn('Deferred proxy environment refresh failed:', error.message);
+    });
+  }
   return normalized;
 }
 
@@ -474,11 +1050,24 @@ async function getLanguageConfig() {
   return normalizeLanguageConfig(data[LANGUAGE_STORAGE_KEY] || DEFAULT_LANGUAGE_CONFIG);
 }
 
+async function syncLanguageHeaderRulesFromStorage(siteScopeConfig = null) {
+  const config = await getLanguageConfig();
+  const extensionEnabled = await getExtensionEnabled();
+  const siteScope = siteScopeConfig || await getSiteScopeConfig();
+  const task = languageRuleUpdateQueue.catch(() => {}).then(() => (
+    applyLanguageHeaderRules(config, extensionEnabled, siteScope)
+  ));
+  languageRuleUpdateQueue = task;
+  return task;
+}
+
 async function saveAndApplyLanguageConfig(config) {
   const normalized = normalizeLanguageConfig(config);
   await chrome.storage.local.set({ [LANGUAGE_STORAGE_KEY]: normalized });
-  await applyLanguageHeaderRules(normalized, await getExtensionEnabled());
-  await updateAllTabs();
+  await syncLanguageHeaderRulesFromStorage();
+  refreshDebuggerEnvironment({ reload: true }).catch(error => {
+    console.warn('Deferred language environment refresh failed:', error.message);
+  });
   return normalized;
 }
 
@@ -486,7 +1075,18 @@ async function syncLanguageSettingsFromStorage() {
   const data = await chrome.storage.local.get(LANGUAGE_STORAGE_KEY);
   const normalized = normalizeLanguageConfig(data[LANGUAGE_STORAGE_KEY] || DEFAULT_LANGUAGE_CONFIG);
   await chrome.storage.local.set({ [LANGUAGE_STORAGE_KEY]: normalized });
-  await applyLanguageHeaderRules(normalized, await getExtensionEnabled());
+  await syncLanguageHeaderRulesFromStorage();
+}
+
+async function saveAndApplySiteScopeConfig(config) {
+  const normalized = normalizeSiteScopeConfig(config);
+  await chrome.storage.local.set({ [SITE_SCOPE_STORAGE_KEY]: normalized });
+  if (await getExtensionEnabled()) {
+    reconcileAllTabs(normalized, true).catch(error => {
+      console.warn('Deferred site scope reconciliation failed:', error.message);
+    });
+  }
+  return normalized;
 }
 
 async function getTimezoneConfig() {
@@ -508,7 +1108,9 @@ async function getTimezoneState() {
 async function saveAndApplyTimezoneConfig(config) {
   const normalized = normalizeTimezoneConfig(config);
   await chrome.storage.local.set({ [TIMEZONE_STORAGE_KEY]: normalized });
-  await updateAllTabs();
+  refreshDebuggerEnvironment({ reload: true }).catch(error => {
+    console.warn('Deferred timezone environment refresh failed:', error.message);
+  });
   return getTimezoneState();
 }
 
@@ -516,75 +1118,6 @@ async function syncTimezoneSettingsFromStorage() {
   const data = await chrome.storage.local.get(TIMEZONE_STORAGE_KEY);
   const normalized = normalizeTimezoneConfig(data[TIMEZONE_STORAGE_KEY] || DEFAULT_TIMEZONE_CONFIG);
   await chrome.storage.local.set({ [TIMEZONE_STORAGE_KEY]: normalized });
-}
-
-async function getFingerprintConfig() {
-  const data = await chrome.storage.local.get(FINGERPRINT_STORAGE_KEY);
-  return normalizeFingerprintConfig(data[FINGERPRINT_STORAGE_KEY] || DEFAULT_FINGERPRINT_CONFIG);
-}
-
-async function saveAndApplyFingerprintConfig(config) {
-  const normalized = normalizeFingerprintConfig(config);
-  await chrome.storage.local.set({ [FINGERPRINT_STORAGE_KEY]: normalized });
-  await updateAllTabs();
-  return normalized;
-}
-
-async function syncFingerprintSettingsFromStorage() {
-  const data = await chrome.storage.local.get(FINGERPRINT_STORAGE_KEY);
-  const normalized = normalizeFingerprintConfig(data[FINGERPRINT_STORAGE_KEY] || DEFAULT_FINGERPRINT_CONFIG);
-  await chrome.storage.local.set({ [FINGERPRINT_STORAGE_KEY]: normalized });
-}
-
-const spooferFunction = (payload) => {
-  window.postMessage({
-    source: 'ip-geolocation-extension',
-    type: 'apply-spoof',
-    payload
-  }, '*');
-};
-
-async function injectScript(tabId) {
-  if (!(await getExtensionEnabled())) return;
-
-  const { lastLocation, languageConfig, timezoneConfig, fingerprintConfig } = await chrome.storage.local.get([
-    'lastLocation',
-    LANGUAGE_STORAGE_KEY,
-    TIMEZONE_STORAGE_KEY,
-    FINGERPRINT_STORAGE_KEY
-  ]);
-  const normalizedLanguage = normalizeLanguageConfig(languageConfig || DEFAULT_LANGUAGE_CONFIG);
-  const resolvedTimezone = resolveTimezone(lastLocation, timezoneConfig || DEFAULT_TIMEZONE_CONFIG);
-  const normalizedFingerprint = normalizeFingerprintConfig(fingerprintConfig || DEFAULT_FINGERPRINT_CONFIG);
-  if (lastLocation && lastLocation.latitude && lastLocation.longitude) {
-    chrome.scripting.executeScript({
-      target: { tabId: tabId, allFrames: true },
-      func: spooferFunction,
-      args: [{
-        extensionEnabled: true,
-        latitude: lastLocation.latitude,
-        longitude: lastLocation.longitude,
-        timezone: resolvedTimezone.timezone,
-        timezoneOffset: resolvedTimezone.timezoneOffset,
-        timezoneConfig: resolvedTimezone.config,
-        languageConfig: normalizedLanguage,
-        fingerprintConfig: normalizedFingerprint
-      }],
-      injectImmediately: true,
-      world: 'MAIN'
-    }).catch(error => console.log(`无法注入到 Tab \({tabId}: \){error.message}`));
-  }
-}
-
-async function updateAllTabs() {
-  if (!(await getExtensionEnabled())) return;
-
-  const tabs = await chrome.tabs.query({});
-  for (const tab of tabs) {
-    if (tab.id) {
-      injectScript(tab.id);
-    }
-  }
 }
 
 async function updateGeolocation(forceUpdate = false) {
@@ -628,8 +1161,8 @@ async function updateGeolocation(forceUpdate = false) {
       lastGeoError: ''
     });
     
-    console.log(`位置已更新为: \({locationToSet.country} (\){locationToSet.latitude}, ${locationToSet.longitude})。正在更新所有标签页...`);
-    await updateAllTabs();
+    console.log(`位置已更新为: ${locationToSet.country} (${locationToSet.latitude}, ${locationToSet.longitude})`);
+    await refreshDebuggerEnvironment({ reload: true });
     return { ok: true, location: locationToSet };
 
   } catch (error) {
@@ -642,20 +1175,21 @@ async function updateGeolocation(forceUpdate = false) {
 
 async function clearRuntimeSideEffects() {
   await unregisterSpoofContentScripts();
+  pendingNativeReloadTabs.clear();
+  await detachAllDebuggerTabs();
   await removeLanguageHeaderRules();
   await clearProxySettings();
   await setWebRtcPolicyValue(null);
 }
 
 async function activateRuntimeSideEffects() {
-  await registerSpoofContentScripts();
+  await unregisterSpoofContentScripts();
   await syncProxySettingsFromStorage();
   await syncLanguageSettingsFromStorage();
   await syncTimezoneSettingsFromStorage();
-  await syncFingerprintSettingsFromStorage();
   await applyWebRtcSettings();
   await updateGeolocation(true);
-  await updateAllTabs();
+  await attachEligibleTabs(false);
 }
 
 async function getExtensionState() {
@@ -686,8 +1220,111 @@ async function initializeExtension() {
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'loading') {
-    injectScript(tabId);
+  if (changeInfo.status === 'complete' && pendingNativeReloadTabs.delete(tabId)) {
+    chrome.tabs.reload(tabId).catch(error => {
+      setDebuggerState(tabId, 'error', error.message);
+    });
+    return;
+  }
+  if (changeInfo.status !== 'loading' && !changeInfo.url) return;
+
+  (async () => {
+    if (!(await getExtensionEnabled())) return;
+    const targetUrl = changeInfo.url || tab.pendingUrl || tab.url;
+    await reconcileTabEnvironment(tabId, targetUrl, {
+      reloadOnAttach: true,
+      reloadOnDetach: true,
+      deferReloadOnDetach: Boolean(changeInfo.url)
+    });
+  })().catch(error => {
+    setDebuggerState(tabId, 'error', error.message);
+  });
+});
+
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  (async () => {
+    if (!(await getExtensionEnabled())) return;
+    const tab = await chrome.tabs.get(tabId);
+    const targetUrl = tab.pendingUrl || tab.url;
+    await reconcileTabEnvironment(tabId, targetUrl, {
+      reloadOnAttach: true,
+      reloadOnDetach: true
+    });
+  })().catch(error => {
+    setDebuggerState(tabId, 'error', error.message);
+  });
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  clearDebuggerTabState(tabId);
+  reconcilingTabs.delete(tabId);
+  pendingNativeReloadTabs.delete(tabId);
+  blockedDebuggerTabs.delete(tabId);
+  debuggerStateByTab.delete(tabId);
+  syncLanguageHeaderRulesFromStorage().catch(error => {
+    console.warn('Language header rule cleanup failed:', error.message);
+  });
+});
+
+chrome.debugger.onEvent.addListener((source, method, params) => {
+  const tabId = source && source.tabId;
+  if (!Number.isInteger(tabId)) return;
+
+  if (method === 'Target.attachedToTarget' && params && params.sessionId) {
+    const childSessions = childSessionsByTab.get(tabId) || new Set();
+    childSessions.add(params.sessionId);
+    childSessionsByTab.set(tabId, childSessions);
+
+    (async () => {
+      const childSession = { tabId, sessionId: params.sessionId };
+      const tab = await chrome.tabs.get(tabId);
+      const targetUrl = tab.pendingUrl || tab.url;
+      if (!(await getExtensionEnabled()) || !await isTabUrlInSiteScope(targetUrl)) {
+        await debuggerSendCommand(childSession, 'Runtime.runIfWaitingForDebugger', {});
+        return;
+      }
+
+      const profile = await getEnvironmentProfile();
+      const identity = await readNativeIdentity(tabId, { tabId });
+      const failures = await configureDebuggerSession(childSession, profile, identity, { resume: true });
+      if (failures.length) {
+        console.warn(
+          `Child environment setup warnings for tab ${tabId} (${params.targetInfo && params.targetInfo.type}):`,
+          failures.join(' | ')
+        );
+      }
+    })().catch(async (error) => {
+      console.warn(`Child debugger setup failed for tab ${tabId}:`, error.message);
+      try {
+        await debuggerSendCommand({ tabId, sessionId: params.sessionId }, 'Runtime.runIfWaitingForDebugger', {});
+      } catch (resumeError) {}
+    });
+    return;
+  }
+
+  if (method === 'Target.detachedFromTarget' && params && params.sessionId) {
+    const childSessions = childSessionsByTab.get(tabId);
+    if (childSessions) {
+      childSessions.delete(params.sessionId);
+    }
+  }
+});
+
+chrome.debugger.onDetach.addListener((source, reason) => {
+  if (source && source.targetId && directlyAttachedWorkerTargets.has(source.targetId)) {
+    directlyAttachedWorkerTargets.delete(source.targetId);
+    return;
+  }
+
+  const tabId = source && source.tabId;
+  if (!Number.isInteger(tabId)) return;
+
+  clearDebuggerTabState(tabId);
+  if (reason === 'canceled_by_user') {
+    blockedDebuggerTabs.add(tabId);
+    setDebuggerState(tabId, 'blocked', '调试会话已被用户或 DevTools 断开');
+  } else {
+    setDebuggerState(tabId, 'detached', `统一环境已断开: ${reason || 'unknown'}`);
   }
 });
 
@@ -718,6 +1355,46 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     (async () => {
       const state = await setExtensionEnabled(request.enabled);
       sendResponse({ status: "ok", state });
+    })().catch(error => sendResponse({ status: "error", message: error.message }));
+    return true;
+  }
+
+  if (request.action === "getEnvironmentStatus") {
+    (async () => {
+      const state = await getEnvironmentStatus(Number(request.tabId));
+      sendResponse({ status: "ok", state });
+    })().catch(error => sendResponse({ status: "error", message: error.message }));
+    return true;
+  }
+
+  if (request.action === "attachEnvironmentTab") {
+    (async () => {
+      const tabId = Number(request.tabId);
+      if (!Number.isInteger(tabId)) {
+        throw new Error('未找到当前标签页');
+      }
+      blockedDebuggerTabs.delete(tabId);
+      const state = await ensureDebuggerAttached(tabId, { force: true });
+      if (state.status === 'attached') {
+        await chrome.tabs.reload(tabId);
+      }
+      sendResponse({ status: "ok", state: await getEnvironmentStatus(tabId) });
+    })().catch(error => sendResponse({ status: "error", message: error.message }));
+    return true;
+  }
+
+  if (request.action === "getSiteScopeConfig") {
+    (async () => {
+      const config = await getSiteScopeConfig();
+      sendResponse({ status: "ok", config });
+    })().catch(error => sendResponse({ status: "error", message: error.message }));
+    return true;
+  }
+
+  if (request.action === "setSiteScopeConfig") {
+    (async () => {
+      const config = await saveAndApplySiteScopeConfig(request.config || {});
+      sendResponse({ status: "ok", config });
     })().catch(error => sendResponse({ status: "error", message: error.message }));
     return true;
   }
@@ -782,22 +1459,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     (async () => {
       const state = await setWebRtcGlobalMode(request.mode);
       sendResponse({ status: "ok", state });
-    })().catch(error => sendResponse({ status: "error", message: error.message }));
-    return true;
-  }
-
-  if (request.action === "getFingerprintConfig") {
-    (async () => {
-      const config = await getFingerprintConfig();
-      sendResponse({ status: "ok", config });
-    })().catch(error => sendResponse({ status: "error", message: error.message }));
-    return true;
-  }
-
-  if (request.action === "setFingerprintConfig") {
-    (async () => {
-      const config = await saveAndApplyFingerprintConfig(request.config || {});
-      sendResponse({ status: "ok", config });
     })().catch(error => sendResponse({ status: "error", message: error.message }));
     return true;
   }

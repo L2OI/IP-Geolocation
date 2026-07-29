@@ -8,6 +8,13 @@ const mapFrame = document.getElementById('map-frame');
 const masterEnableBtn = document.getElementById('master-enable-btn');
 const masterDisableBtn = document.getElementById('master-disable-btn');
 const masterStatusEl = document.getElementById('master-status');
+const environmentStatusEl = document.getElementById('environment-status');
+const reattachEnvironmentBtn = document.getElementById('reattach-environment-btn');
+const siteScopeAllBtn = document.getElementById('site-scope-all-btn');
+const siteScopeCustomBtn = document.getElementById('site-scope-custom-btn');
+const siteScopeDomainsEl = document.getElementById('site-scope-domains');
+const saveSiteScopeBtn = document.getElementById('save-site-scope-btn');
+const siteScopeStatusEl = document.getElementById('site-scope-status');
 const proxySchemeEl = document.getElementById('proxy-scheme');
 const proxyHostEl = document.getElementById('proxy-host');
 const proxyPortEl = document.getElementById('proxy-port');
@@ -19,12 +26,6 @@ const languageEnabledEl = document.getElementById('language-enabled');
 const languagePresetEl = document.getElementById('language-preset');
 const saveLanguageBtn = document.getElementById('save-language-btn');
 const languageStatusEl = document.getElementById('language-status');
-const fingerprintFontsEnabledEl = document.getElementById('fingerprint-fonts-enabled');
-const fingerprintWebglEnabledEl = document.getElementById('fingerprint-webgl-enabled');
-const fingerprintHardwareEnabledEl = document.getElementById('fingerprint-hardware-enabled');
-const fingerprintExcludeCloudflareEl = document.getElementById('fingerprint-exclude-cloudflare');
-const saveFingerprintBtn = document.getElementById('save-fingerprint-btn');
-const fingerprintStatusEl = document.getElementById('fingerprint-status');
 const timezoneEnabledEl = document.getElementById('timezone-enabled');
 const timezoneModeEl = document.getElementById('timezone-mode');
 const timezoneSelectEl = document.getElementById('timezone-select');
@@ -49,6 +50,10 @@ function localizePopup() {
     const key = element.getAttribute('data-i18n');
     element.textContent = t(key, element.textContent);
   });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((element) => {
+    const key = element.getAttribute('data-i18n-placeholder');
+    element.placeholder = t(key, element.placeholder);
+  });
 }
 
 const DEFAULT_PROXY_CONFIG = {
@@ -69,12 +74,9 @@ const DEFAULT_TIMEZONE_CONFIG = {
   mode: 'auto',
   timezone: ''
 };
-const DEFAULT_FINGERPRINT_CONFIG = {
-  enabled: true,
-  fonts: true,
-  webgl: true,
-  hardware: true,
-  excludeCloudflare: true
+const DEFAULT_SITE_SCOPE_CONFIG = {
+  mode: 'all',
+  domains: []
 };
 const WEBRTC_STORAGE_KEY = 'webRtcConfig';
 const DEFAULT_WEBRTC_CONFIG = {
@@ -86,6 +88,7 @@ const WEBRTC_POLICY_VALUES = {
   off: null
 };
 let extensionEnabled = true;
+let siteScopeMode = 'all';
 
 function chromeCallback(fn, ...args) {
   return new Promise((resolve, reject) => {
@@ -173,6 +176,18 @@ function setMasterStatus(text, isError = false) {
   masterStatusEl.style.fontWeight = isError ? '700' : '300';
 }
 
+function setEnvironmentStatus(text, isError = false) {
+  environmentStatusEl.textContent = text;
+  environmentStatusEl.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+  environmentStatusEl.style.fontWeight = isError ? '700' : '300';
+}
+
+function setSiteScopeStatus(text, isError = false) {
+  siteScopeStatusEl.textContent = text;
+  siteScopeStatusEl.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+  siteScopeStatusEl.style.fontWeight = isError ? '700' : '300';
+}
+
 function setLanguageStatus(text, isError = false) {
   languageStatusEl.textContent = text;
   languageStatusEl.style.color = isError ? 'var(--danger)' : 'var(--muted)';
@@ -185,14 +200,12 @@ function setTimezoneStatus(text, isError = false) {
   timezoneStatusEl.style.fontWeight = isError ? '700' : '300';
 }
 
-function setFingerprintStatus(text, isError = false) {
-  fingerprintStatusEl.textContent = text;
-  fingerprintStatusEl.style.color = isError ? 'var(--danger)' : 'var(--muted)';
-  fingerprintStatusEl.style.fontWeight = isError ? '700' : '300';
-}
-
 function updateTimezoneControlState() {
   timezoneSelectEl.disabled = !extensionEnabled || timezoneModeEl.value !== 'manual';
+}
+
+function updateSiteScopeControlState() {
+  siteScopeDomainsEl.disabled = !extensionEnabled || siteScopeMode !== 'custom';
 }
 
 function setFeatureControlsEnabled(enabled) {
@@ -209,19 +222,20 @@ function setFeatureControlsEnabled(enabled) {
     languageEnabledEl,
     languagePresetEl,
     saveLanguageBtn,
-    fingerprintFontsEnabledEl,
-    fingerprintWebglEnabledEl,
-    fingerprintHardwareEnabledEl,
-    fingerprintExcludeCloudflareEl,
-    saveFingerprintBtn,
     timezoneEnabledEl,
     timezoneModeEl,
     saveTimezoneBtn,
+    siteScopeAllBtn,
+    siteScopeCustomBtn,
+    siteScopeDomainsEl,
+    saveSiteScopeBtn,
+    reattachEnvironmentBtn,
     refreshBtn
   ].forEach((control) => {
     control.disabled = !enabled;
   });
   updateTimezoneControlState();
+  updateSiteScopeControlState();
 }
 
 function renderMasterToggle(enabled) {
@@ -257,9 +271,105 @@ async function saveExtensionEnabled(enabled) {
       enabled
     });
     renderMasterToggle(!response.state || response.state.enabled !== false);
+    await loadEnvironmentStatus();
   } catch (error) {
     renderMasterToggle(!enabled);
     setMasterStatus(`${t('masterSaveFailed', '切换失败')}: ${error.message}`, true);
+  }
+}
+
+async function getActiveTabId() {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tab = tabs && tabs[0];
+  return tab && Number.isInteger(tab.id) ? tab.id : null;
+}
+
+function renderEnvironmentStatus(state) {
+  const status = state && state.status ? state.status : 'detached';
+  const statusLabels = {
+    attached: t('environmentAttached', '统一环境已附加'),
+    attaching: t('environmentAttaching', '正在附加统一环境...'),
+    detached: t('environmentDetached', '统一环境未附加'),
+    excluded: t('environmentExcluded', '当前域名未启用隐藏'),
+    blocked: t('environmentBlocked', '统一环境已被 DevTools 断开'),
+    unsupported: t('environmentUnsupported', '当前页面不支持统一环境模式'),
+    error: t('environmentError', '统一环境附加失败')
+  };
+  const profile = state && state.profile ? state.profile : null;
+  const details = profile && status !== 'excluded'
+    ? [profile.language, profile.timezone, profile.country].filter(Boolean).join(' / ')
+    : '';
+  const message = state && state.message && state.message !== statusLabels[status]
+    ? state.message
+    : '';
+  const suffix = [details, message].filter(Boolean).join(' - ');
+  setEnvironmentStatus(
+    suffix ? `${statusLabels[status] || statusLabels.detached}: ${suffix}` : statusLabels[status] || statusLabels.detached,
+    status === 'error' || status === 'blocked'
+  );
+}
+
+async function loadEnvironmentStatus() {
+  try {
+    const tabId = await getActiveTabId();
+    const response = await sendRuntimeMessage({
+      action: 'getEnvironmentStatus',
+      tabId
+    });
+    renderEnvironmentStatus(response.state);
+  } catch (error) {
+    setEnvironmentStatus(`${t('environmentError', '统一环境附加失败')}: ${error.message}`, true);
+  }
+}
+
+function normalizeSiteScopeConfig(config) {
+  const merged = { ...DEFAULT_SITE_SCOPE_CONFIG, ...(config || {}) };
+  let domains = merged.domains;
+  if (typeof domains === 'string') {
+    domains = domains.split(/[\s,]+/);
+  }
+  if (!Array.isArray(domains)) {
+    domains = [];
+  }
+  return {
+    mode: merged.mode === 'custom' ? 'custom' : 'all',
+    domains: [...new Set(domains.map(item => String(item || '').trim()).filter(Boolean))]
+  };
+}
+
+function renderSiteScopeConfig(config) {
+  const normalized = normalizeSiteScopeConfig(config);
+  siteScopeMode = normalized.mode;
+  siteScopeAllBtn.classList.toggle('is-active', siteScopeMode === 'all');
+  siteScopeCustomBtn.classList.toggle('is-active', siteScopeMode === 'custom');
+  siteScopeAllBtn.setAttribute('aria-pressed', String(siteScopeMode === 'all'));
+  siteScopeCustomBtn.setAttribute('aria-pressed', String(siteScopeMode === 'custom'));
+  siteScopeDomainsEl.value = normalized.domains.join('\n');
+  updateSiteScopeControlState();
+
+  if (siteScopeMode === 'all') {
+    setSiteScopeStatus(t('siteScopeAllStatus', '语言、时区和定位对全部网站隐藏'));
+  } else if (normalized.domains.length) {
+    setSiteScopeStatus(`${t('siteScopeCustomStatus', '仅对自定义域名隐藏')}: ${normalized.domains.length}`);
+  } else {
+    setSiteScopeStatus(t('siteScopeEmptyStatus', '自定义模式尚未添加域名'));
+  }
+}
+
+function readSiteScopeForm() {
+  return {
+    mode: siteScopeMode,
+    domains: siteScopeDomainsEl.value.split(/[\n,]+/).map(item => item.trim()).filter(Boolean)
+  };
+}
+
+async function loadSiteScopeConfig() {
+  try {
+    const response = await sendRuntimeMessage({ action: 'getSiteScopeConfig' });
+    renderSiteScopeConfig(response.config);
+  } catch (error) {
+    renderSiteScopeConfig(DEFAULT_SITE_SCOPE_CONFIG);
+    setSiteScopeStatus(`${t('siteScopeReadFailed', '读取隐藏范围失败')}: ${error.message}`, true);
   }
 }
 
@@ -350,58 +460,6 @@ async function loadLanguageConfig() {
   } catch (error) {
     renderLanguageConfig(DEFAULT_LANGUAGE_CONFIG);
     setLanguageStatus(`${t('languageReadFailed', '读取语言配置失败')}: ${error.message}`, true);
-  }
-}
-
-function normalizeFingerprintConfig(config) {
-  return {
-    ...DEFAULT_FINGERPRINT_CONFIG,
-    ...(config || {}),
-    enabled: config && config.enabled === false ? false : true,
-    fonts: config && config.fonts === false ? false : true,
-    webgl: config && config.webgl === false ? false : true,
-    hardware: config && config.hardware === false ? false : true,
-    excludeCloudflare: config && config.excludeCloudflare === false ? false : true
-  };
-}
-
-function renderFingerprintConfig(config) {
-  const normalized = normalizeFingerprintConfig(config);
-  fingerprintFontsEnabledEl.checked = normalized.fonts !== false;
-  fingerprintWebglEnabledEl.checked = normalized.webgl !== false;
-  fingerprintHardwareEnabledEl.checked = normalized.hardware !== false;
-  fingerprintExcludeCloudflareEl.checked = normalized.excludeCloudflare !== false;
-  const activeItems = [];
-  if (normalized.fonts !== false) activeItems.push(t('fingerprintFontsLabel', '字体'));
-  if (normalized.webgl !== false) activeItems.push('WebGL');
-  if (normalized.hardware !== false) activeItems.push(t('fingerprintHardwareLabel', '硬件'));
-  setFingerprintStatus(
-    activeItems.length
-      ? `${t('fingerprintEnabledPrefix', '已启用')}: ${activeItems.join(' / ')}${normalized.excludeCloudflare !== false ? `, ${t('fingerprintCloudflareExcluded', '已排除 CF')}` : ''}`
-      : t('fingerprintDisabled', '未启用环境指纹伪装')
-  );
-}
-
-function readFingerprintForm() {
-  const fonts = fingerprintFontsEnabledEl.checked;
-  const webgl = fingerprintWebglEnabledEl.checked;
-  const hardware = fingerprintHardwareEnabledEl.checked;
-  return {
-    enabled: fonts || webgl || hardware,
-    fonts,
-    webgl,
-    hardware,
-    excludeCloudflare: fingerprintExcludeCloudflareEl.checked
-  };
-}
-
-async function loadFingerprintConfig() {
-  try {
-    const response = await sendRuntimeMessage({ action: 'getFingerprintConfig' });
-    renderFingerprintConfig(response.config);
-  } catch (error) {
-    renderFingerprintConfig(DEFAULT_FINGERPRINT_CONFIG);
-    setFingerprintStatus(`${t('fingerprintReadFailed', '读取环境指纹配置失败')}: ${error.message}`, true);
   }
 }
 
@@ -510,6 +568,50 @@ masterDisableBtn.addEventListener('click', () => {
   saveExtensionEnabled(false);
 });
 
+reattachEnvironmentBtn.addEventListener('click', async () => {
+  reattachEnvironmentBtn.disabled = true;
+  setEnvironmentStatus(t('environmentReattaching', '正在重新附加并刷新当前页...'));
+  try {
+    const tabId = await getActiveTabId();
+    const response = await sendRuntimeMessage({
+      action: 'attachEnvironmentTab',
+      tabId
+    });
+    renderEnvironmentStatus(response.state);
+  } catch (error) {
+    setEnvironmentStatus(`${t('environmentError', '统一环境附加失败')}: ${error.message}`, true);
+  } finally {
+    reattachEnvironmentBtn.disabled = !extensionEnabled;
+  }
+});
+
+siteScopeAllBtn.addEventListener('click', () => {
+  siteScopeMode = 'all';
+  renderSiteScopeConfig({ mode: siteScopeMode, domains: siteScopeDomainsEl.value });
+});
+
+siteScopeCustomBtn.addEventListener('click', () => {
+  siteScopeMode = 'custom';
+  renderSiteScopeConfig({ mode: siteScopeMode, domains: siteScopeDomainsEl.value });
+});
+
+saveSiteScopeBtn.addEventListener('click', async () => {
+  saveSiteScopeBtn.disabled = true;
+  setSiteScopeStatus(t('siteScopeSaving', '正在保存隐藏范围...'));
+  try {
+    const response = await sendRuntimeMessage({
+      action: 'setSiteScopeConfig',
+      config: readSiteScopeForm()
+    });
+    renderSiteScopeConfig(response.config);
+  } catch (error) {
+    setSiteScopeStatus(`${t('siteScopeSaveFailed', '保存失败')}: ${error.message}`, true);
+  } finally {
+    saveSiteScopeBtn.disabled = !extensionEnabled;
+    updateSiteScopeControlState();
+  }
+});
+
 webRtcStrictBtn.addEventListener('click', async () => {
   renderWebRtcState({ config: { globalMode: 'strict' } });
   try {
@@ -594,22 +696,6 @@ saveLanguageBtn.addEventListener('click', async () => {
   }
 });
 
-saveFingerprintBtn.addEventListener('click', async () => {
-  saveFingerprintBtn.disabled = true;
-  setFingerprintStatus(t('fingerprintSaving', '正在保存环境指纹配置...'));
-  try {
-    const response = await sendRuntimeMessage({
-      action: 'setFingerprintConfig',
-      config: readFingerprintForm()
-    });
-    renderFingerprintConfig(response.config);
-  } catch (error) {
-    setFingerprintStatus(`${t('fingerprintSaveFailed', '保存失败')}: ${error.message}`, true);
-  } finally {
-    saveFingerprintBtn.disabled = false;
-  }
-});
-
 timezoneModeEl.addEventListener('change', updateTimezoneControlState);
 
 saveTimezoneBtn.addEventListener('click', async () => {
@@ -636,6 +722,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadProxyConfig();
   loadWebRtcConfig();
   loadLanguageConfig();
-  loadFingerprintConfig();
   loadTimezoneConfig();
+  loadSiteScopeConfig();
+  loadEnvironmentStatus();
 });

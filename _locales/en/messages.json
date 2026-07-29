@@ -41,11 +41,80 @@
   "masterSaveFailed": {
     "message": "Switch failed"
   },
+  "environmentSectionTitle": {
+    "message": "Unified Environment"
+  },
+  "environmentReattachButton": {
+    "message": "Reattach Current Page"
+  },
+  "environmentLoading": {
+    "message": "Loading unified environment status..."
+  },
+  "environmentAttached": {
+    "message": "Unified environment attached"
+  },
+  "environmentAttaching": {
+    "message": "Attaching unified environment..."
+  },
+  "environmentDetached": {
+    "message": "Unified environment not attached"
+  },
+  "environmentBlocked": {
+    "message": "Unified environment detached by DevTools"
+  },
+  "environmentUnsupported": {
+    "message": "Unified environment is unavailable on this page"
+  },
+  "environmentError": {
+    "message": "Unified environment attach failed"
+  },
+  "environmentReattaching": {
+    "message": "Reattaching and refreshing current page..."
+  },
+  "environmentExcluded": {
+    "message": "Hiding is disabled for this domain"
+  },
+  "siteScopeSectionTitle": {
+    "message": "Hiding Scope"
+  },
+  "siteScopeAllMode": {
+    "message": "All Websites"
+  },
+  "siteScopeCustomMode": {
+    "message": "Custom Domains"
+  },
+  "siteScopeDomainsPlaceholder": {
+    "message": "example.com\nplatform.trans.eu"
+  },
+  "siteScopeNote": {
+    "message": "One per line or comma-separated; example.com also matches its subdomains. This controls language, timezone, and geolocation hiding only; proxy and WebRTC remain global."
+  },
+  "siteScopeSaveButton": {
+    "message": "Save Hiding Scope"
+  },
+  "siteScopeLoading": {
+    "message": "Loading hiding scope..."
+  },
+  "siteScopeAllStatus": {
+    "message": "Language, timezone, and geolocation hiding applies to all websites"
+  },
+  "siteScopeCustomStatus": {
+    "message": "Hiding applies only to custom domains"
+  },
+  "siteScopeEmptyStatus": {
+    "message": "No domains have been added in custom mode"
+  },
+  "siteScopeReadFailed": {
+    "message": "Failed to read hiding scope"
+  },
+  "siteScopeSaving": {
+    "message": "Saving hiding scope..."
+  },
+  "siteScopeSaveFailed": {
+    "message": "Failed to save hiding scope"
+  },
   "languageSectionTitle": {
     "message": "Language Spoofing"
-  },
-  "fingerprintSectionTitle": {
-    "message": "Environment Fingerprint Spoofing"
   },
   "timezoneSectionTitle": {
     "message": "Timezone Spoofing"
@@ -80,18 +149,6 @@
   "labelLanguage": {
     "message": "Language"
   },
-  "labelFonts": {
-    "message": "Fonts"
-  },
-  "labelWebgl": {
-    "message": "WebGL"
-  },
-  "labelHardware": {
-    "message": "Hardware"
-  },
-  "labelExcludeCloudflare": {
-    "message": "Exclude CF"
-  },
   "labelTimezoneMode": {
     "message": "Mode"
   },
@@ -119,9 +176,6 @@
   "saveLanguageButton": {
     "message": "Save Language"
   },
-  "saveFingerprintButton": {
-    "message": "Save Spoofing"
-  },
   "saveTimezoneButton": {
     "message": "Save Timezone"
   },
@@ -136,9 +190,6 @@
   },
   "languageLoading": {
     "message": "Loading language status..."
-  },
-  "fingerprintLoading": {
-    "message": "Loading environment fingerprint status..."
   },
   "timezoneLoading": {
     "message": "Loading timezone status..."
@@ -199,30 +250,6 @@
   },
   "languageSaving": {
     "message": "Saving language config..."
-  },
-  "fingerprintFontsLabel": {
-    "message": "Fonts"
-  },
-  "fingerprintHardwareLabel": {
-    "message": "Hardware"
-  },
-  "fingerprintEnabledPrefix": {
-    "message": "Enabled"
-  },
-  "fingerprintCloudflareExcluded": {
-    "message": "CF excluded"
-  },
-  "fingerprintDisabled": {
-    "message": "Environment fingerprint spoofing disabled"
-  },
-  "fingerprintReadFailed": {
-    "message": "Failed to read environment fingerprint config"
-  },
-  "fingerprintSaving": {
-    "message": "Saving environment fingerprint config..."
-  },
-  "fingerprintSaveFailed": {
-    "message": "Save failed"
   },
   "timezoneEnabledPrefix": {
     "message": "Enabled"

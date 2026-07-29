@@ -41,11 +41,80 @@
   "masterSaveFailed": {
     "message": "切换失败"
   },
+  "environmentSectionTitle": {
+    "message": "统一环境"
+  },
+  "environmentReattachButton": {
+    "message": "重新附加当前页"
+  },
+  "environmentLoading": {
+    "message": "统一环境状态加载中..."
+  },
+  "environmentAttached": {
+    "message": "统一环境已附加"
+  },
+  "environmentAttaching": {
+    "message": "正在附加统一环境..."
+  },
+  "environmentDetached": {
+    "message": "统一环境未附加"
+  },
+  "environmentBlocked": {
+    "message": "统一环境已被 DevTools 断开"
+  },
+  "environmentUnsupported": {
+    "message": "当前页面不支持统一环境模式"
+  },
+  "environmentError": {
+    "message": "统一环境附加失败"
+  },
+  "environmentReattaching": {
+    "message": "正在重新附加并刷新当前页..."
+  },
+  "environmentExcluded": {
+    "message": "当前域名未启用隐藏"
+  },
+  "siteScopeSectionTitle": {
+    "message": "隐藏范围"
+  },
+  "siteScopeAllMode": {
+    "message": "全部网站"
+  },
+  "siteScopeCustomMode": {
+    "message": "自定义域名"
+  },
+  "siteScopeDomainsPlaceholder": {
+    "message": "example.com\nplatform.trans.eu"
+  },
+  "siteScopeNote": {
+    "message": "每行或逗号分隔；example.com 同时匹配其子域名。仅控制语言、时区和定位隐藏，代理与 WebRTC 仍全局生效。"
+  },
+  "siteScopeSaveButton": {
+    "message": "保存隐藏范围"
+  },
+  "siteScopeLoading": {
+    "message": "隐藏范围加载中..."
+  },
+  "siteScopeAllStatus": {
+    "message": "语言、时区和定位对全部网站隐藏"
+  },
+  "siteScopeCustomStatus": {
+    "message": "仅对自定义域名隐藏"
+  },
+  "siteScopeEmptyStatus": {
+    "message": "自定义模式尚未添加域名"
+  },
+  "siteScopeReadFailed": {
+    "message": "读取隐藏范围失败"
+  },
+  "siteScopeSaving": {
+    "message": "正在保存隐藏范围..."
+  },
+  "siteScopeSaveFailed": {
+    "message": "保存隐藏范围失败"
+  },
   "languageSectionTitle": {
     "message": "语言伪装"
-  },
-  "fingerprintSectionTitle": {
-    "message": "环境指纹伪装"
   },
   "timezoneSectionTitle": {
     "message": "时区伪装"
@@ -80,18 +149,6 @@
   "labelLanguage": {
     "message": "语言"
   },
-  "labelFonts": {
-    "message": "字体"
-  },
-  "labelWebgl": {
-    "message": "WebGL"
-  },
-  "labelHardware": {
-    "message": "硬件"
-  },
-  "labelExcludeCloudflare": {
-    "message": "排除 CF"
-  },
   "labelTimezoneMode": {
     "message": "模式"
   },
@@ -119,9 +176,6 @@
   "saveLanguageButton": {
     "message": "保存语言"
   },
-  "saveFingerprintButton": {
-    "message": "保存伪装"
-  },
   "saveTimezoneButton": {
     "message": "保存时区"
   },
@@ -136,9 +190,6 @@
   },
   "languageLoading": {
     "message": "语言状态加载中..."
-  },
-  "fingerprintLoading": {
-    "message": "环境指纹状态加载中..."
   },
   "timezoneLoading": {
     "message": "时区状态加载中..."
@@ -199,30 +250,6 @@
   },
   "languageSaving": {
     "message": "正在保存语言配置..."
-  },
-  "fingerprintFontsLabel": {
-    "message": "字体"
-  },
-  "fingerprintHardwareLabel": {
-    "message": "硬件"
-  },
-  "fingerprintEnabledPrefix": {
-    "message": "已启用"
-  },
-  "fingerprintCloudflareExcluded": {
-    "message": "已排除 CF"
-  },
-  "fingerprintDisabled": {
-    "message": "未启用环境指纹伪装"
-  },
-  "fingerprintReadFailed": {
-    "message": "读取环境指纹配置失败"
-  },
-  "fingerprintSaving": {
-    "message": "正在保存环境指纹配置..."
-  },
-  "fingerprintSaveFailed": {
-    "message": "保存失败"
   },
   "timezoneEnabledPrefix": {
     "message": "已启用"

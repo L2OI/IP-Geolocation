@@ -169,7 +169,8 @@
     }
 
     .master-actions,
-    .proxy-actions {
+    .proxy-actions,
+    .scope-actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
@@ -222,10 +223,11 @@
     }
 
     #master-status,
+    #environment-status,
+    #site-scope-status,
     #proxy-status,
     #timezone-status,
-    #language-status,
-    #fingerprint-status {
+    #language-status {
       margin-top: 14px;
       padding: 11px 0 0;
       color: var(--muted);
@@ -233,6 +235,33 @@
       font-weight: 300;
       word-break: break-all;
       border-top: 1px solid var(--line);
+    }
+
+    #site-scope-domains {
+      width: 100%;
+      min-height: 86px;
+      margin-top: 14px;
+      padding: 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 2px;
+      outline: none;
+      resize: vertical;
+      color: var(--ink);
+      background: var(--field);
+      font: inherit;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    #site-scope-domains:focus {
+      border-color: var(--ink);
+    }
+
+    .section-note {
+      margin: 10px 0 14px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 300;
     }
 
     iframe {
@@ -319,12 +348,9 @@
       border-color: var(--ink);
     }
 
-    #save-fingerprint-btn {
-      margin-top: 18px;
-    }
-
     .master-option,
-    .proxy-option {
+    .proxy-option,
+    .scope-option {
       color: var(--ink);
       background: var(--white);
       border-color: var(--line-strong);
@@ -332,7 +358,8 @@
     }
 
     .master-option:not(.is-active):hover:not(:disabled),
-    .proxy-option:not(.is-active):hover:not(:disabled) {
+    .proxy-option:not(.is-active):hover:not(:disabled),
+    .scope-option:not(.is-active):hover:not(:disabled) {
       color: var(--ink);
       background: var(--field);
       border-color: var(--ink);
@@ -346,6 +373,10 @@
     .proxy-option.is-active:hover:not(:disabled),
     .proxy-option.is-active:active:not(:disabled),
     .proxy-option.is-active:focus-visible,
+    .scope-option.is-active,
+    .scope-option.is-active:hover:not(:disabled),
+    .scope-option.is-active:active:not(:disabled),
+    .scope-option.is-active:focus-visible,
     #save-proxy-btn.proxy-option.is-active,
     #save-proxy-btn.proxy-option.is-active:hover:not(:disabled),
     #save-proxy-btn.proxy-option.is-active:active:not(:disabled),
@@ -390,6 +421,24 @@
       <button id="master-disable-btn" class="master-option" data-i18n="masterDisableButton">关闭</button>
     </div>
     <div id="master-status" data-i18n="masterLoading">插件状态加载中...</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title" data-i18n="environmentSectionTitle">统一环境</div>
+    <button id="reattach-environment-btn" data-i18n="environmentReattachButton">重新附加当前页</button>
+    <div id="environment-status" data-i18n="environmentLoading">统一环境状态加载中...</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title" data-i18n="siteScopeSectionTitle">隐藏范围</div>
+    <div class="scope-actions">
+      <button id="site-scope-all-btn" class="scope-option" data-i18n="siteScopeAllMode">全部网站</button>
+      <button id="site-scope-custom-btn" class="scope-option" data-i18n="siteScopeCustomMode">自定义域名</button>
+    </div>
+    <textarea id="site-scope-domains" spellcheck="false" data-i18n-placeholder="siteScopeDomainsPlaceholder" placeholder="example.com&#10;platform.trans.eu"></textarea>
+    <div class="section-note" data-i18n="siteScopeNote">每行或逗号分隔；example.com 同时匹配其子域名。仅控制语言、时区和定位隐藏，代理与 WebRTC 仍全局生效。</div>
+    <button id="save-site-scope-btn" data-i18n="siteScopeSaveButton">保存隐藏范围</button>
+    <div id="site-scope-status" data-i18n="siteScopeLoading">隐藏范围加载中...</div>
   </div>
 
   <div class="section">
@@ -448,25 +497,6 @@
     </div>
     <button id="save-language-btn" data-i18n="saveLanguageButton">保存语言</button>
     <div id="language-status" data-i18n="languageLoading">语言状态加载中...</div>
-  </div>
-
-  <div class="section">
-    <div class="section-title" data-i18n="fingerprintSectionTitle">环境指纹伪装</div>
-    <div class="proxy-grid">
-      <label for="fingerprint-fonts-enabled" data-i18n="labelFonts">字体</label>
-      <input id="fingerprint-fonts-enabled" type="checkbox">
-
-      <label for="fingerprint-webgl-enabled" data-i18n="labelWebgl">WebGL</label>
-      <input id="fingerprint-webgl-enabled" type="checkbox">
-
-      <label for="fingerprint-hardware-enabled" data-i18n="labelHardware">硬件</label>
-      <input id="fingerprint-hardware-enabled" type="checkbox">
-
-      <label for="fingerprint-exclude-cloudflare" data-i18n="labelExcludeCloudflare">排除 CF</label>
-      <input id="fingerprint-exclude-cloudflare" type="checkbox">
-    </div>
-    <button id="save-fingerprint-btn" data-i18n="saveFingerprintButton">保存伪装</button>
-    <div id="fingerprint-status" data-i18n="fingerprintLoading">环境指纹状态加载中...</div>
   </div>
 
   <div class="section">
