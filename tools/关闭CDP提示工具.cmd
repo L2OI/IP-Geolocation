@@ -31,8 +31,8 @@ $Action = ([string]$env:SILENT_CDP_ACTION).Trim().ToLowerInvariant()
 if (!$Action) {
   Write-Host 'Chromium 浏览器 CDP 调试提示管理'
   Write-Host ''
-  Write-Host '1. 安装或修复隐藏参数'
-  Write-Host '2. 恢复浏览器启动设置'
+  Write-Host '1. 安装或修复普通快捷方式隐藏参数'
+  Write-Host '2. 移除普通快捷方式隐藏参数'
   Write-Host '3. 仅预览，不修改'
   Write-Host '0. 退出'
   Write-Host ''
@@ -69,9 +69,7 @@ function Get-ShortcutPaths {
     [Environment]::GetFolderPath('Desktop'),
     [Environment]::GetFolderPath('CommonDesktopDirectory'),
     [Environment]::GetFolderPath('StartMenu'),
-    [Environment]::GetFolderPath('CommonStartMenu'),
-    (Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'),
-    (Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\StartMenu')
+    [Environment]::GetFolderPath('CommonStartMenu')
   ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique
 
   foreach ($root in $roots) {
@@ -247,7 +245,7 @@ try {
     Complete-Script 1
   }
 
-  Write-Host $(if ($DryRun) { '正在预览...' } elseif ($Remove) { '正在恢复启动设置...' } else { '正在安装或修复隐藏参数...' })
+  Write-Host $(if ($DryRun) { '正在预览...' } elseif ($Remove) { '正在移除普通快捷方式隐藏参数...' } else { '正在安装或修复普通快捷方式隐藏参数...' })
   $shortcutChanges = 0
   foreach ($browser in $browsers) {
     Write-Host "`n$($browser.Name)：$($browser.Path)"
@@ -258,13 +256,14 @@ try {
   if ($DryRun) {
     Write-Host "预览完成：将修改快捷方式 $shortcutChanges 项。" -ForegroundColor Green
   } elseif ($Remove) {
-    Write-Host "恢复完成：快捷方式 $shortcutChanges 项。" -ForegroundColor Green
+    Write-Host "移除完成：快捷方式 $shortcutChanges 项。" -ForegroundColor Green
   } else {
     Write-Host "安装完成：快捷方式 $shortcutChanges 项。" -ForegroundColor Green
     Write-Host "启动参数：$Flag"
   }
   Write-Host '请完全退出相关浏览器进程后重新打开。'
-  Write-Host '本脚本不会读取或修改注册表。请从处理后的快捷方式启动浏览器。'
+  Write-Host '本脚本不会读取或修改注册表，也不会处理任务栏或开始菜单固定项。'
+  Write-Host '请从处理后的桌面或普通开始菜单快捷方式启动浏览器。'
   Write-Host '浏览器未运行时，直接点击外部链接或双击原始 exe 不会带上该参数。'
   Write-Host '浏览器更新覆盖启动设置后，重新运行本脚本即可。'
   Complete-Script 0
