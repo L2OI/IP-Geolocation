@@ -1,4 +1,4 @@
-# IP Geolocation and Local Proxy
+# IP Geolocation
 
 <p align="center">
   <img src="./icon.png" width="96" height="96" alt="IP Geolocation icon">
