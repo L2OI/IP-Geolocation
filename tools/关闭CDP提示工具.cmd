@@ -13,6 +13,68 @@ $Flag = '--silent-debugger-extension-api'
 $ScriptPath = $env:SILENT_CDP_SCRIPT
 $StartedFromMenu = [string]::IsNullOrWhiteSpace($env:SILENT_CDP_ACTION)
 
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class ShortcutAppIdWriter {
+  [StructLayout(LayoutKind.Sequential, Pack = 4)]
+  struct PROPERTYKEY { public Guid fmtid; public uint pid; }
+
+  [StructLayout(LayoutKind.Explicit)]
+  struct PROPVARIANT {
+    [FieldOffset(0)] public ushort vt;
+    [FieldOffset(8)] public IntPtr ptr;
+  }
+
+  [ComImport, Guid("0000010b-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IPersistFile {
+    [PreserveSig] int GetClassID(out Guid classId);
+    [PreserveSig] int IsDirty();
+    [PreserveSig] int Load([MarshalAs(UnmanagedType.LPWStr)] string fileName, uint mode);
+    [PreserveSig] int Save([MarshalAs(UnmanagedType.LPWStr)] string fileName, bool remember);
+    [PreserveSig] int SaveCompleted([MarshalAs(UnmanagedType.LPWStr)] string fileName);
+    [PreserveSig] int GetCurFile([MarshalAs(UnmanagedType.LPWStr)] out string fileName);
+  }
+
+  [ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IPropertyStore {
+    [PreserveSig] int GetCount(out uint count);
+    [PreserveSig] int GetAt(uint index, out PROPERTYKEY key);
+    [PreserveSig] int GetValue(ref PROPERTYKEY key, out PROPVARIANT value);
+    [PreserveSig] int SetValue(ref PROPERTYKEY key, ref PROPVARIANT value);
+    [PreserveSig] int Commit();
+  }
+
+  [DllImport("ole32.dll")]
+  static extern int PropVariantClear(ref PROPVARIANT value);
+
+  public static void Set(string path, string appId) {
+    object link = Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid("00021401-0000-0000-C000-000000000046")));
+    try {
+      var persist = (IPersistFile)link;
+      int hr = persist.Load(path, 2);
+      if (hr != 0) Marshal.ThrowExceptionForHR(hr);
+      var store = (IPropertyStore)link;
+      var key = new PROPERTYKEY { fmtid = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), pid = 5 };
+      var value = new PROPVARIANT { vt = 31, ptr = Marshal.StringToCoTaskMemUni(appId) };
+      try {
+        hr = store.SetValue(ref key, ref value);
+        if (hr != 0) Marshal.ThrowExceptionForHR(hr);
+        hr = store.Commit();
+        if (hr != 0) Marshal.ThrowExceptionForHR(hr);
+        hr = persist.Save(path, true);
+        if (hr != 0) Marshal.ThrowExceptionForHR(hr);
+      } finally {
+        PropVariantClear(ref value);
+      }
+    } finally {
+      if (Marshal.IsComObject(link)) Marshal.FinalReleaseComObject(link);
+    }
+  }
+}
+'@
+
 function Complete-Script([int]$Code) {
   if ($StartedFromMenu -or $env:SILENT_CDP_ELEVATED -eq 'elevated') {
     Write-Host ''
@@ -176,7 +238,7 @@ function Find-InstalledBrowsers {
       $file = Get-Item -LiteralPath $expanded
       if (!(Test-BrowserDefinition $file $definition)) { continue }
       if ($found | Where-Object { $_.Path -eq $file.FullName }) { continue }
-      $found.Add([pscustomobject]@{ Name=$definition.Name; Path=$file.FullName })
+      $found.Add([pscustomobject]@{ Id=$definition.Id; Name=$definition.Name; Path=$file.FullName })
     }
   }
   return @($found)
@@ -187,8 +249,44 @@ function Remove-Flag([string]$Value) {
   return [regex]::Replace($Value, "(?i)(^|\s+)$([regex]::Escape($Flag))(?=\s|$)", '$1').Trim()
 }
 
+function Get-ShortcutAppUserModelId([string]$ShortcutPath) {
+  try {
+    $shellApplication = New-Object -ComObject Shell.Application
+    $folder = $shellApplication.Namespace((Split-Path -Parent $ShortcutPath))
+    $item = $folder.ParseName((Split-Path -Leaf $ShortcutPath))
+    return [string]$item.ExtendedProperty('System.AppUserModel.ID')
+  } catch {
+    return ''
+  }
+}
+
+function Find-BrowserAppUserModelId($Browser) {
+  $shell = New-Object -ComObject WScript.Shell
+  foreach ($shortcutPath in Get-ShortcutPaths) {
+    try {
+      $target = [Environment]::ExpandEnvironmentVariables([string]$shell.CreateShortcut($shortcutPath).TargetPath)
+      if (![string]::Equals($target, $Browser.Path, [StringComparison]::OrdinalIgnoreCase)) { continue }
+      $appId = Get-ShortcutAppUserModelId $shortcutPath
+      if (![string]::IsNullOrWhiteSpace($appId)) { return $appId }
+    } catch {}
+  }
+
+  try {
+    $appsFolder = (New-Object -ComObject Shell.Application).Namespace('shell:AppsFolder')
+    foreach ($item in $appsFolder.Items()) {
+      $target = [Environment]::ExpandEnvironmentVariables([string]$item.ExtendedProperty('System.Link.TargetParsingPath'))
+      if (![string]::Equals($target, $Browser.Path, [StringComparison]::OrdinalIgnoreCase)) { continue }
+      $appId = [string]$item.ExtendedProperty('System.AppUserModel.ID')
+      if (![string]::IsNullOrWhiteSpace($appId)) { return $appId }
+    }
+  } catch {}
+
+  return ''
+}
+
 function Update-BrowserShortcuts($Browser) {
   $shell = New-Object -ComObject WScript.Shell
+  $browserAppId = Find-BrowserAppUserModelId $Browser
   $changed = 0
   $matched = 0
   foreach ($shortcutPath in Get-ShortcutPaths) {
@@ -205,12 +303,20 @@ function Update-BrowserShortcuts($Browser) {
       } else {
         "$current $Flag".Trim()
       }
-      if ($updated -eq $current) { continue }
+      $needsArgumentUpdate = $updated -ne $current
+      $needsAppIdUpdate = !$Remove -and ![string]::IsNullOrWhiteSpace($browserAppId) -and
+        [string]::IsNullOrWhiteSpace((Get-ShortcutAppUserModelId $shortcutPath))
+      if (!$needsArgumentUpdate -and !$needsAppIdUpdate) { continue }
       if ($DryRun) {
         Write-Host "[预览] 快捷方式：$shortcutPath"
       } else {
-        $shortcut.Arguments = $updated
-        $shortcut.Save()
+        if ($needsArgumentUpdate) {
+          $shortcut.Arguments = $updated
+          $shortcut.Save()
+        }
+        if ($needsAppIdUpdate) {
+          [ShortcutAppIdWriter]::Set($shortcutPath, $browserAppId)
+        }
         Write-Host "已更新快捷方式：$shortcutPath"
       }
       $changed += 1
@@ -231,6 +337,9 @@ function Update-BrowserShortcuts($Browser) {
       $shortcut.WorkingDirectory = Split-Path -Parent $Browser.Path
       $shortcut.IconLocation = "$($Browser.Path),0"
       $shortcut.Save()
+      if (![string]::IsNullOrWhiteSpace($browserAppId)) {
+        [ShortcutAppIdWriter]::Set($shortcutPath, $browserAppId)
+      }
       Write-Host "已创建快捷方式：$shortcutPath"
     }
     $changed += 1
@@ -261,11 +370,8 @@ try {
     Write-Host "安装完成：快捷方式 $shortcutChanges 项。" -ForegroundColor Green
     Write-Host "启动参数：$Flag"
   }
-  Write-Host '请完全退出相关浏览器进程后重新打开。'
-  Write-Host '本脚本不会读取或修改注册表，也不会处理任务栏或开始菜单固定项。'
-  Write-Host '请从处理后的桌面或普通开始菜单快捷方式启动浏览器。'
-  Write-Host '浏览器未运行时，直接点击外部链接或双击原始 exe 不会带上该参数。'
-  Write-Host '浏览器更新覆盖启动设置后，重新运行本脚本即可。'
+  Write-Host '请完全退出浏览器后，从处理后的快捷方式重新打开。'
+  Write-Host '本脚本不读写注册表，也不处理任务栏固定项。'
   Complete-Script 0
 } catch {
   Write-Host "执行失败：$($_.Exception.Message)" -ForegroundColor Red
