@@ -8,6 +8,7 @@
 
 A simple Chromium browser extension that helps browser fingerprint checkers pass online consistency checks by keeping language, IP geolocation, proxy settings, timezone, and WebRTC behavior aligned.
 
-目前版本已经该用CDP修改方案，伪装效果更好，无感过cloudflare，如有浏览器CDP弹窗请用tools内的关闭CDP提示工具
+目前版本已经该用CDP修改方案，伪装效果更好，无感过cloudflare，如有浏览器CDP弹窗请用tools内的关闭CDP提示工具，
+或者手动添加--silent-debugger-extension-api浏览器启动参数
 
 LINUXDO
