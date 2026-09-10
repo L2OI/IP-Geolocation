@@ -28,7 +28,7 @@ const DEBUGGER_TARGET_FILTER = [
 const attachedTabIds = new Set();
 const attachingTabs = new Map();
 const reconcilingTabs = new Map();
-const pendingNativeReloadTabs = new Set();
+const pendingNativeReloadTabs = new Map();
 const blockedDebuggerTabs = new Set();
 const childSessionsByTab = new Map();
 const nativeIdentityByTab = new Map();
@@ -36,6 +36,8 @@ const debuggerStateByTab = new Map();
 const directlyAttachedWorkerTargets = new Map();
 let workerTargetScanTimer = null;
 let languageRuleUpdateQueue = Promise.resolve();
+let extensionTransitionQueue = Promise.resolve();
+let extensionInitializationTask = null;
 const DEFAULT_PROXY_CONFIG = {
   enabled: false,
   scheme: 'http',
@@ -75,6 +77,12 @@ function chromeCall(fn, ...args) {
       else resolve();
     });
   });
+}
+
+function queueExtensionTransition(task) {
+  const next = extensionTransitionQueue.catch(() => {}).then(task);
+  extensionTransitionQueue = next.catch(() => {});
+  return next;
 }
 
 async function getExtensionEnabled() {
@@ -256,6 +264,22 @@ function setDebuggerState(tabId, status, message = '') {
 
 function isAttachableUrl(url) {
   return /^https?:\/\//i.test(String(url || ''));
+}
+
+async function reloadTabIfCommitted(tabId, expectedUrl = null) {
+  const tab = await chrome.tabs.get(tabId);
+  const committedUrl = tab.url || '';
+  const pendingUrl = tab.pendingUrl || '';
+
+  // A reload cannot specify a URL. Never reload while a navigation is still
+  // pending, otherwise Chrome may reload the transitional about:blank page.
+  if (tab.status !== 'complete') return false;
+  if (pendingUrl && pendingUrl !== committedUrl) return false;
+  if (!isAttachableUrl(committedUrl)) return false;
+  if (expectedUrl && committedUrl !== expectedUrl) return false;
+
+  await chrome.tabs.reload(tabId);
+  return true;
 }
 
 function isUrlInSiteScope(url, config) {
@@ -536,7 +560,7 @@ async function ensureDebuggerAttached(tabId, options = {}) {
     ensureWorkerTargetScanner();
 
     if (!alreadyAttached && options.reloadOnAttach) {
-      await chrome.tabs.reload(tabId);
+      await reloadTabIfCommitted(tabId, targetUrl);
     }
 
     return state;
@@ -685,9 +709,9 @@ async function reconcileTabEnvironment(tabId, targetUrl, options = {}) {
       await detachDebuggerTab(tabId);
       if (options.reloadOnDetach !== false) {
         if (options.deferReloadOnDetach) {
-          pendingNativeReloadTabs.add(tabId);
+          pendingNativeReloadTabs.set(tabId, targetUrl);
         } else {
-          await chrome.tabs.reload(tabId);
+          await reloadTabIfCommitted(tabId, targetUrl);
         }
       }
     }
@@ -744,7 +768,7 @@ async function refreshDebuggerEnvironment(options = {}) {
       await configureDebuggerSession(session, profile, identity);
 
       if (options.reload) {
-        await chrome.tabs.reload(tabId);
+        await reloadTabIfCommitted(tabId);
       } else {
         const childSessions = childSessionsByTab.get(tabId) || new Set();
         for (const sessionId of [...childSessions]) {
@@ -1199,29 +1223,40 @@ async function getExtensionState() {
 }
 
 async function setExtensionEnabled(enabled) {
-  const normalized = Boolean(enabled);
-  await chrome.storage.local.set({ [EXTENSION_ENABLED_KEY]: normalized });
+  return queueExtensionTransition(async () => {
+    const normalized = Boolean(enabled);
+    await chrome.storage.local.set({ [EXTENSION_ENABLED_KEY]: normalized });
 
-  if (normalized) {
-    await activateRuntimeSideEffects();
-  } else {
-    await clearRuntimeSideEffects();
-  }
+    if (normalized) {
+      await activateRuntimeSideEffects();
+    } else {
+      await clearRuntimeSideEffects();
+    }
 
-  return getExtensionState();
+    return getExtensionState();
+  });
 }
 
-async function initializeExtension() {
-  if (await getExtensionEnabled()) {
-    await activateRuntimeSideEffects();
-  } else {
-    await clearRuntimeSideEffects();
+function initializeExtension() {
+  if (!extensionInitializationTask) {
+    extensionInitializationTask = queueExtensionTransition(async () => {
+      if (await getExtensionEnabled()) {
+        await activateRuntimeSideEffects();
+      } else {
+        await clearRuntimeSideEffects();
+      }
+    }).finally(() => {
+      extensionInitializationTask = null;
+    });
   }
+  return extensionInitializationTask;
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && pendingNativeReloadTabs.delete(tabId)) {
-    chrome.tabs.reload(tabId).catch(error => {
+  if (changeInfo.status === 'complete' && pendingNativeReloadTabs.has(tabId)) {
+    const expectedUrl = pendingNativeReloadTabs.get(tabId);
+    pendingNativeReloadTabs.delete(tabId);
+    reloadTabIfCommitted(tabId, expectedUrl).catch(error => {
       setDebuggerState(tabId, 'error', error.message);
     });
     return;
@@ -1376,7 +1411,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       blockedDebuggerTabs.delete(tabId);
       const state = await ensureDebuggerAttached(tabId, { force: true });
       if (state.status === 'attached') {
-        await chrome.tabs.reload(tabId);
+        await reloadTabIfCommitted(tabId);
       }
       sendResponse({ status: "ok", state: await getEnvironmentStatus(tabId) });
     })().catch(error => sendResponse({ status: "error", message: error.message }));
