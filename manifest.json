@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "1.7",
+  "version": "1.8",
   "default_locale": "zh_CN",
   "description": "__MSG_extDescription__",
   "permissions": [
@@ -26,16 +26,5 @@
   "icons": {
     "128": "icon.png"
   },
-  "sandbox": {
-    "pages": [
-      "map.html"
-    ]
-  },
-  "content_security_policy": {
-    "sandbox": "sandbox allow-scripts; script-src 'self' 'unsafe-eval'; child-src 'none'; object-src 'none'"
-  },
-  "web_accessible_resources": [{
-    "resources": ["map.html", "images/*.svg"],
-    "matches": ["<all_urls>"]
-  }]
+  "web_accessible_resources": []
 }

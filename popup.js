@@ -4,7 +4,6 @@ const longitudeEl = document.getElementById('longitude');
 const timezoneValueEl = document.getElementById('timezone');
 const updateTimeEl = document.getElementById('updateTime');
 const refreshBtn = document.getElementById('refresh-btn');
-const mapFrame = document.getElementById('map-frame');
 const masterEnableBtn = document.getElementById('master-enable-btn');
 const masterDisableBtn = document.getElementById('master-disable-btn');
 const masterStatusEl = document.getElementById('master-status');
@@ -141,21 +140,6 @@ function updateUI(locationData) {
   timezoneValueEl.textContent = locationData.timezone || t('notAvailable', 'N/A');
   updateTimeEl.textContent = locationData.updateTime || t('notAvailable', 'N/A');
 
-  const payload = {
-    location: locationData,
-    iconUrls: {
-      iconUrl: chrome.runtime.getURL('images/marker-icon.svg'),
-      iconRetinaUrl: chrome.runtime.getURL('images/marker-icon-2x.svg')
-    }
-  };
-  
-  mapFrame.onload = () => {
-    mapFrame.contentWindow.postMessage(payload, '*');
-  };
-
-  if (mapFrame.contentWindow) {
-    mapFrame.contentWindow.postMessage(payload, '*');
-  }
 }
 
 function displayLocation() {

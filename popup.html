@@ -2,19 +2,33 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <script src="theme.js"></script>
   <style>
     :root {
-      --paper: #fafafa;
-      --ink: #111111;
-      --subtle: #4a4a4a;
-      --muted: #6f6f6f;
-      --line: #e5e5e5;
-      --line-strong: #cfcfcf;
-      --field: #f3f3f3;
-      --white: #ffffff;
-      --danger: #111111;
-      --shadow: 0 1px 2px rgba(0, 0, 0, .06);
+      color-scheme: light;
+      --paper: rgb(255, 255, 255);
+      --ink: rgb(10, 10, 10);
+      --subtle: var(--ink);
+      --muted: var(--ink);
+      --line: rgba(10, 10, 10, .16);
+      --line-strong: rgba(10, 10, 10, .28);
+      --field: var(--paper);
+      --white: var(--paper);
+      --danger: var(--ink);
+      --section-hover: var(--paper);
+      --active-hover: var(--ink);
+      --shadow: none;
     }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --paper: rgb(10, 10, 10);
+      --ink: rgb(250, 250, 250);
+      --line: rgba(250, 250, 250, .16);
+      --line-strong: rgba(250, 250, 250, .28);
+    }
+
+    html { background: var(--paper); }
 
     * { box-sizing: border-box; }
 
@@ -48,13 +62,33 @@
       letter-spacing: .015em;
     }
 
-    .brand-note {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 400;
-      letter-spacing: .02em;
-      text-align: right;
-      white-space: nowrap;
+    #theme-toggle {
+      position: fixed;
+      top: 22px;
+      right: 22px;
+      z-index: 10;
+      width: 24px;
+      height: 24px;
+      min-height: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: var(--ink);
+      box-shadow: none;
+      transition: none;
+    }
+
+    #theme-toggle:hover,
+    #theme-toggle:active {
+      background: var(--ink);
+      opacity: 1;
+    }
+
+    #theme-toggle::before {
+      content: "";
+      position: absolute;
+      inset: -6px;
+      border-radius: 50%;
     }
 
     .section {
@@ -69,7 +103,7 @@
 
     .section:hover {
       border-color: var(--line-strong);
-      background: #fdfdfd;
+      background: var(--section-hover);
     }
 
     .section-title {
@@ -120,6 +154,12 @@
       border-bottom-color: var(--ink);
       background: var(--field);
       box-shadow: 0 1px 0 var(--ink);
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+      color: var(--ink);
+      opacity: 1;
     }
 
     .proxy-grid select option {
@@ -218,7 +258,7 @@
 
     .webrtc-option.is-active:hover:not(:disabled) {
       color: var(--white);
-      background: #2a2a2a;
+      background: var(--active-hover);
       border-color: var(--ink);
     }
 
@@ -411,7 +451,7 @@
 <body>
   <header class="masthead">
     <div class="brand" data-i18n="brandTitle">IP定位</div>
-    <div class="brand-note" data-i18n="brandNote">本地代理</div>
+    <button id="theme-toggle" type="button" aria-label="暗色模式" aria-pressed="false" title="切换至暗色模式"></button>
   </header>
 
   <div class="section master-section">
@@ -532,7 +572,6 @@
     <div id="timezone-status" data-i18n="timezoneLoading">时区状态加载中...</div>
   </div>
 
-  <iframe id="map-frame" src="map.html"></iframe>
   <div id="info-grid">
     <strong data-i18n="fieldCountry">国家</strong> <span id="country" data-i18n="loading">加载中...</span>
     <strong data-i18n="fieldLatitude">纬度</strong> <span id="latitude" data-i18n="loading">加载中...</span>

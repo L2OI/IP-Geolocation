@@ -271,5 +271,14 @@
   },
   "unknownError": {
     "message": "Unknown error"
+  },
+  "darkMode": {
+    "message": "Dark mode"
+  },
+  "switchToLightMode": {
+    "message": "Switch to light mode"
+  },
+  "switchToDarkMode": {
+    "message": "Switch to dark mode"
   }
 }
