@@ -81,13 +81,13 @@
     "message": "全部网站"
   },
   "siteScopeCustomMode": {
-    "message": "自定义域名"
+    "message": "自定义规则"
   },
   "siteScopeDomainsPlaceholder": {
     "message": "example.com\nplatform.trans.eu"
   },
   "siteScopeNote": {
-    "message": "每行或逗号分隔；example.com 同时匹配其子域名。仅控制语言、时区和定位隐藏，代理与 WebRTC 仍全局生效。"
+    "message": "每行一条，支持 domain:、full:、keyword:、regexp: 和 IP/CIDR。代理与 WebRTC 为全局设置，受保护网站应使用同一地区出口。"
   },
   "siteScopeSaveButton": {
     "message": "保存隐藏范围"
@@ -96,13 +96,13 @@
     "message": "隐藏范围加载中..."
   },
   "siteScopeAllStatus": {
-    "message": "语言、时区和定位对全部网站隐藏"
+    "message": "范围：全部网站"
   },
   "siteScopeCustomStatus": {
-    "message": "仅对自定义域名隐藏"
+    "message": "规则数"
   },
   "siteScopeEmptyStatus": {
-    "message": "自定义模式尚未添加域名"
+    "message": "尚未添加规则"
   },
   "siteScopeReadFailed": {
     "message": "读取隐藏范围失败"
@@ -120,16 +120,25 @@
     "message": "时区伪装"
   },
   "webRtcSectionTitle": {
-    "message": "模式"
+    "message": "WebRTC 防泄漏"
   },
   "webRtcStrictMode": {
-    "message": "严格模式"
+    "message": "严格保护"
   },
   "webRtcCompatibleMode": {
-    "message": "兼容模式"
+    "message": "兼容通话"
   },
   "webRtcOffMode": {
-    "message": "关闭"
+    "message": "关闭保护"
+  },
+  "webRtcStrictDescription": {
+    "message": "全局阻止未走代理的 WebRTC UDP 连接，可能影响网页通话。"
+  },
+  "webRtcCompatibleDescription": {
+    "message": "全局限制私网 IP 暴露，保留网页通话兼容性，仍可能暴露真实公网 IP。"
+  },
+  "webRtcOffDescription": {
+    "message": "清除本扩展的全局 WebRTC 策略，恢复浏览器自身设置。"
   },
   "labelEnabled": {
     "message": "启用"
@@ -280,5 +289,71 @@
   },
   "switchToDarkMode": {
     "message": "切换至暗色模式"
+  },
+  "siteRulesTitle": {
+    "message": "规则导入与订阅"
+  },
+  "siteRulesNote": {
+    "message": "GeoIP 仅匹配 IP 地址网址。"
+  },
+  "siteRulesCategories": {
+    "message": "分类"
+  },
+  "siteRulesCategoriesPlaceholder": {
+    "message": "google, openai（留空全部）"
+  },
+  "siteRulesImport": {
+    "message": "导入本地文件"
+  },
+  "siteRulesUrl": {
+    "message": "订阅地址（每日更新）"
+  },
+  "siteRulesSubscribe": {
+    "message": "添加订阅"
+  },
+  "siteRulesRefresh": {
+    "message": "更新订阅"
+  },
+  "siteRulesSchedule": {
+    "message": "更新失败时保留上次规则。"
+  },
+  "siteRulesCount": {
+    "message": "条规则"
+  },
+  "siteRulesCached": {
+    "message": "更新失败，使用缓存"
+  },
+  "siteRulesRemove": {
+    "message": "移除"
+  },
+  "siteRulesWorking": {
+    "message": "处理中..."
+  },
+  "siteRulesRefreshFailed": {
+    "message": "更新失败，保留缓存。"
+  },
+  "siteRulesFailed": {
+    "message": "处理失败"
+  },
+  "siteRulesImported": {
+    "message": "已导入。"
+  },
+  "siteRulesSubscribed": {
+    "message": "订阅已添加。"
+  },
+  "siteRulesRefreshed": {
+    "message": "已更新。"
+  },
+  "siteRulesRemoved": {
+    "message": "已移除。"
+  },
+  "siteRulesUrlRequired": {
+    "message": "请填写订阅地址。"
+  },
+  "siteRulesCategoriesHint": {
+    "message": "多个分类用逗号分隔，可用 google@ads 筛选属性。"
+  },
+  "siteRulesImportHint": {
+    "message": "支持 GeoSite、GeoIP .dat 和域名文本。"
   }
 }

@@ -5,13 +5,11 @@
   const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
   let preference = null;
 
-  // Read synchronously in <head> so reopening the popup does not flash white.
+  // Read before paint to prevent a theme flash.
   try {
     const saved = localStorage.getItem(storageKey);
     if (saved === 'light' || saved === 'dark') preference = saved;
-  } catch {
-    // The switch still works if browser storage is unavailable.
-  }
+  } catch {}
 
   function message(key, fallback) {
     return globalThis.chrome?.i18n?.getMessage(key) || fallback;
@@ -41,9 +39,7 @@
       applyTheme();
       try {
         localStorage.setItem(storageKey, preference);
-      } catch {
-        // Keep the current selection for this popup even if it cannot be saved.
-      }
+      } catch {}
     });
   });
 })();

@@ -265,7 +265,9 @@
     #master-status,
     #environment-status,
     #site-scope-status,
+    #site-rule-status,
     #proxy-status,
+    #webrtc-status,
     #timezone-status,
     #language-status {
       margin-top: 14px;
@@ -277,7 +279,8 @@
       border-top: 1px solid var(--line);
     }
 
-    #site-scope-domains {
+    #site-scope-domains,
+    .rule-field {
       width: 100%;
       min-height: 86px;
       margin-top: 14px;
@@ -293,9 +296,25 @@
       line-height: 1.5;
     }
 
-    #site-scope-domains:focus {
+    #site-scope-domains:focus,
+    .rule-field:focus {
       border-color: var(--ink);
     }
+
+    #site-rule-status:empty { display: none; }
+    #site-rule-panel { margin-top: 18px; }
+    #site-rule-panel summary { cursor: pointer; font-size: 13px; }
+    #site-rule-panel label { display: block; margin-top: 14px; font-size: 12px; color: var(--muted); }
+    .rule-field { min-height: 0; margin-top: 6px; }
+    .rule-source { display: flex; align-items: center; gap: 12px; padding-top: 16px; }
+    .rule-source-info { flex: 1; min-width: 0; letter-spacing: 0; }
+    .rule-source-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; }
+    .rule-source-meta { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 5px; font-size: 12px; font-weight: 400; line-height: 1.6; font-variant-numeric: tabular-nums; }
+    .rule-source-meta span, .rule-source-meta time { white-space: nowrap; }
+    .rule-source-origin { display: block; width: fit-content; max-width: 100%; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.6; color: var(--muted); text-decoration: none; }
+    .rule-source-origin:hover { text-decoration: underline; text-underline-offset: 3px; }
+    .rule-source-error { margin-top: 6px; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
+    .rule-source button { flex-shrink: 0; width: auto; margin: 0; padding: 6px 10px; font-size: 12px; }
 
     .section-note {
       margin: 10px 0 14px;
@@ -470,15 +489,31 @@
   </div>
 
   <div class="section">
-    <div class="section-title" data-i18n="siteScopeSectionTitle">隐藏范围</div>
+    <div class="section-title" id="site-scope-title" data-i18n="siteScopeSectionTitle">隐藏范围</div>
     <div class="scope-actions">
       <button id="site-scope-all-btn" class="scope-option" data-i18n="siteScopeAllMode">全部网站</button>
-      <button id="site-scope-custom-btn" class="scope-option" data-i18n="siteScopeCustomMode">自定义域名</button>
+      <button id="site-scope-custom-btn" class="scope-option" data-i18n="siteScopeCustomMode">自定义规则</button>
     </div>
-    <textarea id="site-scope-domains" spellcheck="false" data-i18n-placeholder="siteScopeDomainsPlaceholder" placeholder="example.com&#10;platform.trans.eu"></textarea>
-    <div class="section-note" data-i18n="siteScopeNote">每行或逗号分隔；example.com 同时匹配其子域名。仅控制语言、时区和定位隐藏，代理与 WebRTC 仍全局生效。</div>
+    <textarea id="site-scope-domains" spellcheck="false" aria-labelledby="site-scope-title" data-i18n-title="siteScopeNote" title="每行一条，支持域名、匹配表达式和 IP/CIDR。" data-i18n-placeholder="siteScopeDomainsPlaceholder" placeholder="example.com&#10;platform.trans.eu"></textarea>
     <button id="save-site-scope-btn" data-i18n="siteScopeSaveButton">保存隐藏范围</button>
     <div id="site-scope-status" data-i18n="siteScopeLoading">隐藏范围加载中...</div>
+    <details id="site-rule-panel">
+      <summary data-i18n="siteRulesTitle">规则导入与订阅</summary>
+      <div class="section-note" data-i18n="siteRulesNote">GeoIP 仅匹配 IP 地址网址。</div>
+      <label for="site-rule-categories" data-i18n-title="siteRulesCategoriesHint" title="多个分类用逗号分隔，可用 google@ads 筛选属性。" data-i18n="siteRulesCategories">分类</label>
+      <input id="site-rule-categories" class="rule-field" type="text" data-i18n-placeholder="siteRulesCategoriesPlaceholder" placeholder="google, openai（留空全部）">
+      <input id="site-rule-files" type="file" multiple hidden>
+      <button id="import-site-rules-btn" data-i18n-title="siteRulesImportHint" title="支持 GeoSite、GeoIP .dat 和域名文本。" data-i18n="siteRulesImport">导入本地文件</button>
+      <label for="site-rule-url" data-i18n-title="siteRulesSchedule" title="更新失败时保留上次规则。" data-i18n="siteRulesUrl">订阅地址（每日更新）</label>
+      <input id="site-rule-url" class="rule-field" type="url" placeholder="https://example.com/geosite.dat">
+      <div class="scope-actions">
+        <button id="add-site-rules-btn" data-i18n="siteRulesSubscribe">添加订阅</button>
+        <button id="refresh-site-rules-btn" data-i18n="siteRulesRefresh">更新订阅</button>
+      </div>
+      <div id="site-rule-status" role="status"></div>
+      <div id="site-rule-sources"></div>
+    </details>
+
   </div>
 
   <div class="section">
@@ -509,12 +544,13 @@
   </div>
 
   <div class="section">
-    <div class="section-title" data-i18n="webRtcSectionTitle">模式</div>
+    <div class="section-title" data-i18n="webRtcSectionTitle">WebRTC 防泄漏</div>
     <div class="webrtc-mode-grid">
-      <button id="webrtc-strict-btn" class="webrtc-option" data-i18n="webRtcStrictMode">严格模式</button>
-      <button id="webrtc-compatible-btn" class="webrtc-option" data-i18n="webRtcCompatibleMode">兼容模式</button>
-      <button id="webrtc-off-btn" class="webrtc-option" data-i18n="webRtcOffMode">关闭</button>
+      <button id="webrtc-strict-btn" class="webrtc-option" data-i18n="webRtcStrictMode">严格保护</button>
+      <button id="webrtc-compatible-btn" class="webrtc-option" data-i18n="webRtcCompatibleMode">兼容通话</button>
+      <button id="webrtc-off-btn" class="webrtc-option" data-i18n="webRtcOffMode">关闭保护</button>
     </div>
+    <div id="webrtc-status" role="status" data-i18n="webRtcStrictDescription">全局阻止未走代理的 WebRTC UDP 连接，可能影响网页通话。</div>
   </div>
 
   <div class="section">
@@ -580,6 +616,7 @@
     <strong data-i18n="fieldUpdatedAt">更新于</strong> <span id="updateTime" data-i18n="loading">加载中...</span>
   </div>
   <button id="refresh-btn" data-i18n="refreshButton">立即刷新</button>
+  <script src="site-rules.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

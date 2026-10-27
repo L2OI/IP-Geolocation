@@ -81,13 +81,13 @@
     "message": "All Websites"
   },
   "siteScopeCustomMode": {
-    "message": "Custom Domains"
+    "message": "Custom Rules"
   },
   "siteScopeDomainsPlaceholder": {
     "message": "example.com\nplatform.trans.eu"
   },
   "siteScopeNote": {
-    "message": "One per line or comma-separated; example.com also matches its subdomains. This controls language, timezone, and geolocation hiding only; proxy and WebRTC remain global."
+    "message": "One rule per line. Supports domain:, full:, keyword:, regexp:, and IP/CIDR. Proxy and WebRTC settings are global. Protected sites should use exits in the same region."
   },
   "siteScopeSaveButton": {
     "message": "Save Hiding Scope"
@@ -96,13 +96,13 @@
     "message": "Loading hiding scope..."
   },
   "siteScopeAllStatus": {
-    "message": "Language, timezone, and geolocation hiding applies to all websites"
+    "message": "Scope: all websites"
   },
   "siteScopeCustomStatus": {
-    "message": "Hiding applies only to custom domains"
+    "message": "Rules"
   },
   "siteScopeEmptyStatus": {
-    "message": "No domains have been added in custom mode"
+    "message": "No rules added"
   },
   "siteScopeReadFailed": {
     "message": "Failed to read hiding scope"
@@ -120,16 +120,25 @@
     "message": "Timezone Spoofing"
   },
   "webRtcSectionTitle": {
-    "message": "Mode"
+    "message": "WebRTC Leak Protection"
   },
   "webRtcStrictMode": {
     "message": "Strict"
   },
   "webRtcCompatibleMode": {
-    "message": "Compatible"
+    "message": "Call Compatibility"
   },
   "webRtcOffMode": {
-    "message": "Off"
+    "message": "Protection Off"
+  },
+  "webRtcStrictDescription": {
+    "message": "Blocks WebRTC UDP connections that bypass the proxy across all sites. May affect web calls."
+  },
+  "webRtcCompatibleDescription": {
+    "message": "Limits private IP exposure across all sites while preserving call compatibility. Your real public IP may still be exposed."
+  },
+  "webRtcOffDescription": {
+    "message": "Clears this extension’s global WebRTC policy and restores the browser’s own settings."
   },
   "labelEnabled": {
     "message": "Enabled"
@@ -280,5 +289,71 @@
   },
   "switchToDarkMode": {
     "message": "Switch to dark mode"
+  },
+  "siteRulesTitle": {
+    "message": "Rule Imports & Subscriptions"
+  },
+  "siteRulesNote": {
+    "message": "GeoIP matches IP address URLs only."
+  },
+  "siteRulesCategories": {
+    "message": "Categories"
+  },
+  "siteRulesCategoriesPlaceholder": {
+    "message": "google, openai (blank for all)"
+  },
+  "siteRulesImport": {
+    "message": "Import Local Files"
+  },
+  "siteRulesUrl": {
+    "message": "Subscription URL (daily updates)"
+  },
+  "siteRulesSubscribe": {
+    "message": "Subscribe"
+  },
+  "siteRulesRefresh": {
+    "message": "Update Subscriptions"
+  },
+  "siteRulesSchedule": {
+    "message": "Failed updates retain cached rules."
+  },
+  "siteRulesCount": {
+    "message": "rules"
+  },
+  "siteRulesCached": {
+    "message": "Update failed; using cache"
+  },
+  "siteRulesRemove": {
+    "message": "Remove"
+  },
+  "siteRulesWorking": {
+    "message": "Processing..."
+  },
+  "siteRulesRefreshFailed": {
+    "message": "Update failed. Cached rules retained."
+  },
+  "siteRulesFailed": {
+    "message": "Operation failed"
+  },
+  "siteRulesImported": {
+    "message": "Imported."
+  },
+  "siteRulesSubscribed": {
+    "message": "Subscribed."
+  },
+  "siteRulesRefreshed": {
+    "message": "Updated."
+  },
+  "siteRulesRemoved": {
+    "message": "Removed."
+  },
+  "siteRulesUrlRequired": {
+    "message": "Enter a subscription URL."
+  },
+  "siteRulesCategoriesHint": {
+    "message": "Separate categories with commas. Use google@ads to filter by attribute."
+  },
+  "siteRulesImportHint": {
+    "message": "Supports GeoSite, GeoIP .dat, and domain text files."
   }
 }

@@ -14,6 +14,14 @@ const siteScopeCustomBtn = document.getElementById('site-scope-custom-btn');
 const siteScopeDomainsEl = document.getElementById('site-scope-domains');
 const saveSiteScopeBtn = document.getElementById('save-site-scope-btn');
 const siteScopeStatusEl = document.getElementById('site-scope-status');
+const siteRuleFilesEl = document.getElementById('site-rule-files');
+const siteRuleCategoriesEl = document.getElementById('site-rule-categories');
+const siteRuleUrlEl = document.getElementById('site-rule-url');
+const siteRuleStatusEl = document.getElementById('site-rule-status');
+const siteRuleSourcesEl = document.getElementById('site-rule-sources');
+const importSiteRulesBtn = document.getElementById('import-site-rules-btn');
+const addSiteRulesBtn = document.getElementById('add-site-rules-btn');
+const refreshSiteRulesBtn = document.getElementById('refresh-site-rules-btn');
 const proxySchemeEl = document.getElementById('proxy-scheme');
 const proxyHostEl = document.getElementById('proxy-host');
 const proxyPortEl = document.getElementById('proxy-port');
@@ -33,6 +41,7 @@ const timezoneStatusEl = document.getElementById('timezone-status');
 const webRtcStrictBtn = document.getElementById('webrtc-strict-btn');
 const webRtcCompatibleBtn = document.getElementById('webrtc-compatible-btn');
 const webRtcOffBtn = document.getElementById('webrtc-off-btn');
+const webRtcStatusEl = document.getElementById('webrtc-status');
 
 function t(key, fallback = key) {
   if (typeof chrome !== 'undefined' && chrome.i18n && chrome.i18n.getMessage) {
@@ -48,6 +57,10 @@ function localizePopup() {
   document.querySelectorAll('[data-i18n]').forEach((element) => {
     const key = element.getAttribute('data-i18n');
     element.textContent = t(key, element.textContent);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach((element) => {
+    const key = element.getAttribute('data-i18n-title');
+    element.title = t(key, element.title);
   });
   document.querySelectorAll('[data-i18n-placeholder]').forEach((element) => {
     const key = element.getAttribute('data-i18n-placeholder');
@@ -77,30 +90,10 @@ const DEFAULT_SITE_SCOPE_CONFIG = {
   mode: 'all',
   domains: []
 };
-const WEBRTC_STORAGE_KEY = 'webRtcConfig';
-const DEFAULT_WEBRTC_CONFIG = {
-  globalMode: 'strict'
-};
-const WEBRTC_POLICY_VALUES = {
-  strict: 'disable_non_proxied_udp',
-  compatible: 'default_public_interface_only',
-  off: null
-};
 let extensionEnabled = true;
 let siteScopeMode = 'all';
-
-function chromeCallback(fn, ...args) {
-  return new Promise((resolve, reject) => {
-    fn(...args, (...callbackArgs) => {
-      const error = chrome.runtime.lastError;
-      if (error) {
-        reject(new Error(error.message));
-        return;
-      }
-      resolve(callbackArgs.length > 1 ? callbackArgs : callbackArgs[0]);
-    });
-  });
-}
+let siteScopeSources = [];
+let siteRuleBusy = false;
 
 function normalizeWebRtcConfig(config = {}) {
   const globalMode = config.globalMode === 'off'
@@ -189,7 +182,12 @@ function updateTimezoneControlState() {
 }
 
 function updateSiteScopeControlState() {
-  siteScopeDomainsEl.disabled = !extensionEnabled || siteScopeMode !== 'custom';
+  const disabled = !extensionEnabled || siteScopeMode !== 'custom' || siteRuleBusy;
+  [siteScopeDomainsEl, siteRuleFilesEl, siteRuleCategoriesEl, siteRuleUrlEl,
+    importSiteRulesBtn, addSiteRulesBtn, refreshSiteRulesBtn,
+    ...siteRuleSourcesEl.querySelectorAll('button')].forEach(control => { control.disabled = disabled; });
+  saveSiteScopeBtn.disabled = !extensionEnabled || siteRuleBusy;
+  refreshSiteRulesBtn.disabled = disabled || !siteScopeSources.some(source => source.url);
 }
 
 function setFeatureControlsEnabled(enabled) {
@@ -310,20 +308,23 @@ function normalizeSiteScopeConfig(config) {
   const merged = { ...DEFAULT_SITE_SCOPE_CONFIG, ...(config || {}) };
   let domains = merged.domains;
   if (typeof domains === 'string') {
-    domains = domains.split(/[\s,]+/);
+    domains = domains.split(/\r?\n/);
   }
   if (!Array.isArray(domains)) {
     domains = [];
   }
   return {
     mode: merged.mode === 'custom' ? 'custom' : 'all',
-    domains: [...new Set(domains.map(item => String(item || '').trim()).filter(Boolean))]
+    domains: [...new Set(domains.map(item => String(item || '').trim()).filter(Boolean))],
+    sources: merged.sources || []
   };
 }
 
 function renderSiteScopeConfig(config) {
   const normalized = normalizeSiteScopeConfig(config);
   siteScopeMode = normalized.mode;
+  siteScopeSources = normalized.sources;
+  renderSiteRuleSources();
   siteScopeAllBtn.classList.toggle('is-active', siteScopeMode === 'all');
   siteScopeCustomBtn.classList.toggle('is-active', siteScopeMode === 'custom');
   siteScopeAllBtn.setAttribute('aria-pressed', String(siteScopeMode === 'all'));
@@ -332,18 +333,18 @@ function renderSiteScopeConfig(config) {
   updateSiteScopeControlState();
 
   if (siteScopeMode === 'all') {
-    setSiteScopeStatus(t('siteScopeAllStatus', '语言、时区和定位对全部网站隐藏'));
-  } else if (normalized.domains.length) {
-    setSiteScopeStatus(`${t('siteScopeCustomStatus', '仅对自定义域名隐藏')}: ${normalized.domains.length}`);
+    setSiteScopeStatus(t('siteScopeAllStatus', '范围：全部网站'));
+  } else if (normalized.domains.length || normalized.sources.length) {
+    setSiteScopeStatus(`${t('siteScopeCustomStatus', '规则数')}: ${normalized.domains.length + normalized.sources.reduce((sum, source) => sum + source.count, 0)}`);
   } else {
-    setSiteScopeStatus(t('siteScopeEmptyStatus', '自定义模式尚未添加域名'));
+    setSiteScopeStatus(t('siteScopeEmptyStatus', '尚未添加规则'));
   }
 }
 
 function readSiteScopeForm() {
   return {
     mode: siteScopeMode,
-    domains: siteScopeDomainsEl.value.split(/[\n,]+/).map(item => item.trim()).filter(Boolean)
+    domains: siteScopeDomainsEl.value.split(/\r?\n/).map(item => item.trim()).filter(Boolean)
   };
 }
 
@@ -497,6 +498,11 @@ async function loadTimezoneConfig() {
 function renderWebRtcState(state) {
   const config = state && state.config ? state.config : { globalMode: 'strict' };
   const mode = config.globalMode || 'strict';
+  const descriptions = {
+    strict: t('webRtcStrictDescription', '全局阻止未走代理的 WebRTC UDP 连接，可能影响网页通话。'),
+    compatible: t('webRtcCompatibleDescription', '全局限制私网 IP 暴露，保留网页通话兼容性，仍可能暴露真实公网 IP。'),
+    off: t('webRtcOffDescription', '清除本扩展的全局 WebRTC 策略，恢复浏览器自身设置。')
+  };
 
   webRtcStrictBtn.classList.toggle('is-active', mode === 'strict');
   webRtcCompatibleBtn.classList.toggle('is-active', mode === 'compatible');
@@ -504,24 +510,7 @@ function renderWebRtcState(state) {
   webRtcStrictBtn.setAttribute('aria-pressed', String(mode === 'strict'));
   webRtcCompatibleBtn.setAttribute('aria-pressed', String(mode === 'compatible'));
   webRtcOffBtn.setAttribute('aria-pressed', String(mode === 'off'));
-}
-
-async function applyWebRtcMode(mode) {
-  const value = WEBRTC_POLICY_VALUES[mode];
-  const setting = chrome.privacy && chrome.privacy.network && chrome.privacy.network.webRTCIPHandlingPolicy;
-  if (!setting) {
-    return;
-  }
-
-  if (value) {
-    await chromeCallback(setting.set.bind(setting), {
-      value,
-      scope: 'regular'
-    });
-    return;
-  }
-
-  await chromeCallback(setting.clear.bind(setting), { scope: 'regular' });
+  webRtcStatusEl.textContent = descriptions[mode];
 }
 
 async function saveWebRtcMode(mode) {
@@ -571,12 +560,12 @@ reattachEnvironmentBtn.addEventListener('click', async () => {
 
 siteScopeAllBtn.addEventListener('click', () => {
   siteScopeMode = 'all';
-  renderSiteScopeConfig({ mode: siteScopeMode, domains: siteScopeDomainsEl.value });
+  renderSiteScopeConfig({ mode: siteScopeMode, domains: siteScopeDomainsEl.value, sources: siteScopeSources });
 });
 
 siteScopeCustomBtn.addEventListener('click', () => {
   siteScopeMode = 'custom';
-  renderSiteScopeConfig({ mode: siteScopeMode, domains: siteScopeDomainsEl.value });
+  renderSiteScopeConfig({ mode: siteScopeMode, domains: siteScopeDomainsEl.value, sources: siteScopeSources });
 });
 
 saveSiteScopeBtn.addEventListener('click', async () => {
@@ -594,6 +583,127 @@ saveSiteScopeBtn.addEventListener('click', async () => {
     saveSiteScopeBtn.disabled = !extensionEnabled;
     updateSiteScopeControlState();
   }
+});
+
+function renderSiteRuleSources() {
+  siteRuleSourcesEl.replaceChildren();
+  for (const source of siteScopeSources) {
+    const row = document.createElement('div');
+    row.className = 'rule-source';
+    const info = document.createElement('div');
+    info.className = 'rule-source-info';
+    const name = document.createElement('div');
+    name.className = 'rule-source-name';
+    name.textContent = source.name;
+    name.title = source.name;
+    const detail = document.createElement('div');
+    detail.className = 'rule-source-meta';
+    const count = document.createElement('span');
+    count.textContent = Number(source.count).toLocaleString() + ' ' + t('siteRulesCount', '条规则');
+    const updated = new Date(source.updatedAt);
+    const time = document.createElement('time');
+    time.dateTime = updated.toISOString();
+    time.title = updated.toLocaleString();
+    time.textContent = updated.toLocaleString([], {
+      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+    });
+    detail.append(count, time);
+    info.append(name, detail);
+    if (source.url) {
+      const origin = document.createElement('a');
+      origin.className = 'rule-source-origin';
+      origin.href = source.url;
+      origin.target = '_blank';
+      origin.rel = 'noopener noreferrer';
+      origin.title = source.url;
+      origin.textContent = new URL(source.url).hostname;
+      info.append(origin);
+    }
+    if (source.error) {
+      const error = document.createElement('div');
+      error.className = 'rule-source-error';
+      error.textContent = t('siteRulesCached', '更新失败，使用缓存') + ': ' + source.error;
+      info.append(error);
+    }
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.dataset.sourceId = source.id;
+    remove.textContent = t('siteRulesRemove', '移除');
+    row.append(info, remove);
+    siteRuleSourcesEl.append(row);
+  }
+}
+
+function setSiteRuleBusy(busy) {
+  siteRuleBusy = busy;
+  updateSiteScopeControlState();
+}
+
+async function updateSiteRuleSource(message, successKey) {
+  setSiteRuleBusy(true);
+  siteRuleStatusEl.textContent = t('siteRulesWorking', '处理中...');
+  try {
+    const response = await sendRuntimeMessage(message);
+    renderSiteScopeConfig(response.config);
+    const failed = response.config.sources.some(source => source.error);
+    siteRuleStatusEl.textContent = failed
+      ? t('siteRulesRefreshFailed', '更新失败，保留缓存。')
+      : t(successKey);
+  } catch (error) {
+    siteRuleStatusEl.textContent = `${t('siteRulesFailed', '处理失败')}: ${error.message}`;
+  } finally {
+    setSiteRuleBusy(false);
+  }
+}
+
+importSiteRulesBtn.addEventListener('click', () => siteRuleFilesEl.click());
+siteRuleFilesEl.addEventListener('change', async () => {
+  const files = [...siteRuleFilesEl.files];
+  if (!files.length) return;
+  setSiteRuleBusy(true);
+  siteRuleStatusEl.textContent = t('siteRulesWorking', '处理中...');
+  try {
+    const inputs = new Map(await Promise.all(files.map(async file => [file.name, new Uint8Array(await file.arrayBuffer())])));
+    const load = async name => {
+      const bytes = inputs.get(name);
+      if (!bytes) throw new Error(`Select the included file too: ${name}`);
+      return { name, bytes };
+    };
+    const groups = [];
+    for (const file of files) {
+      groups.push(...await SiteRules.parse(inputs.get(file.name), {
+        name: file.name, categories: siteRuleCategoriesEl.value, load
+      }));
+    }
+    await updateSiteRuleSource({
+      action: 'addSiteRuleSource', config: readSiteScopeForm(),
+      source: { name: files.map(file => file.name).join(', '), groups, categories: siteRuleCategoriesEl.value }
+    }, 'siteRulesImported');
+  } catch (error) {
+    siteRuleStatusEl.textContent = `${t('siteRulesFailed', '处理失败')}: ${error.message}`;
+  } finally {
+    siteRuleFilesEl.value = '';
+    setSiteRuleBusy(false);
+  }
+});
+
+addSiteRulesBtn.addEventListener('click', () => {
+  if (!siteRuleUrlEl.value.trim()) {
+    siteRuleStatusEl.textContent = t('siteRulesUrlRequired', '请填写订阅地址。');
+    siteRuleUrlEl.focus();
+    return;
+  }
+  updateSiteRuleSource({
+    action: 'addSiteRuleSource', config: readSiteScopeForm(),
+    source: { url: siteRuleUrlEl.value.trim(), categories: siteRuleCategoriesEl.value.trim() }
+  }, 'siteRulesSubscribed');
+});
+refreshSiteRulesBtn.addEventListener('click', () => {
+  updateSiteRuleSource({ action: 'refreshSiteRuleSources' }, 'siteRulesRefreshed');
+});
+siteRuleSourcesEl.addEventListener('click', event => {
+  const button = event.target.closest('button[data-source-id]');
+  if (button) updateSiteRuleSource({ action: 'removeSiteRuleSource', id: button.dataset.sourceId }, 'siteRulesRemoved');
 });
 
 webRtcStrictBtn.addEventListener('click', async () => {

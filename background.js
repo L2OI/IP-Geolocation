@@ -1,3 +1,5 @@
+importScripts('site-rules.js');
+
 const GEO_API_URLS = [
   'https://ipwho.is/',
   'https://ipapi.co/json/',
@@ -14,6 +16,8 @@ const LANGUAGE_STORAGE_KEY = 'languageConfig';
 const WEBRTC_STORAGE_KEY = 'webRtcConfig';
 const TIMEZONE_STORAGE_KEY = 'timezoneConfig';
 const SITE_SCOPE_STORAGE_KEY = 'siteScopeConfig';
+const RULE_SUBSCRIPTION_ALARM = 'updateSiteRulesAlarm';
+let siteScopeConfigCache = null;
 const EXTENSION_ENABLED_KEY = 'extensionEnabled';
 const LANGUAGE_RULE_ID = 1001;
 const LANGUAGE_SESSION_RULE_ID = 1002;
@@ -183,32 +187,12 @@ function normalizeTimezoneConfig(config = {}) {
   };
 }
 
-function normalizeDomainEntry(value) {
-  let input = String(value || '').trim().toLowerCase();
-  if (!input) return '';
-
-  input = input.replace(/^([a-z][a-z\d+.-]*:\/\/)\*\./i, '$1');
-  input = input.replace(/^\*\./, '').replace(/^\./, '');
-  try {
-    const parsed = new URL(input.includes('://') ? input : `http://${input}`);
-    return parsed.hostname.toLowerCase().replace(/\.$/, '');
-  } catch (error) {
-    return '';
-  }
-}
-
 function normalizeSiteScopeConfig(config = {}) {
-  let domains = config.domains;
-  if (typeof domains === 'string') {
-    domains = domains.split(/[\s,]+/);
-  }
-  if (!Array.isArray(domains)) {
-    domains = [];
-  }
-
+  const domains = typeof config.domains === 'string' ? config.domains.split(/\r?\n/) : config.domains || [];
   return {
     mode: config.mode === 'custom' ? 'custom' : 'all',
-    domains: [...new Set(domains.map(normalizeDomainEntry).filter(Boolean))]
+    domains: [...new Set(domains.map(item => String(item).trim()).filter(Boolean))],
+    sources: config.sources || []
   };
 }
 
@@ -271,8 +255,7 @@ async function reloadTabIfCommitted(tabId, expectedUrl = null) {
   const committedUrl = tab.url || '';
   const pendingUrl = tab.pendingUrl || '';
 
-  // A reload cannot specify a URL. Never reload while a navigation is still
-  // pending, otherwise Chrome may reload the transitional about:blank page.
+  // Avoid reloading a pending navigation into about:blank.
   if (tab.status !== 'complete') return false;
   if (pendingUrl && pendingUrl !== committedUrl) return false;
   if (!isAttachableUrl(committedUrl)) return false;
@@ -285,20 +268,22 @@ async function reloadTabIfCommitted(tabId, expectedUrl = null) {
 function isUrlInSiteScope(url, config) {
   if (!isAttachableUrl(url)) return false;
 
-  const normalized = normalizeSiteScopeConfig(config);
-  if (normalized.mode === 'all') return true;
+  if (config.mode === 'all') return true;
 
   try {
     const hostname = new URL(url).hostname.toLowerCase().replace(/\.$/, '');
-    return normalized.domains.some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
+    return SiteRules.compile(config)(hostname);
   } catch (error) {
     return false;
   }
 }
 
 async function getSiteScopeConfig() {
-  const data = await chrome.storage.local.get(SITE_SCOPE_STORAGE_KEY);
-  return normalizeSiteScopeConfig(data[SITE_SCOPE_STORAGE_KEY] || DEFAULT_SITE_SCOPE_CONFIG);
+  if (!siteScopeConfigCache) {
+    const data = await chrome.storage.local.get(SITE_SCOPE_STORAGE_KEY);
+    siteScopeConfigCache = normalizeSiteScopeConfig(data[SITE_SCOPE_STORAGE_KEY] || DEFAULT_SITE_SCOPE_CONFIG);
+  }
+  return siteScopeConfigCache;
 }
 
 async function isTabUrlInSiteScope(url, config = null) {
@@ -1102,15 +1087,101 @@ async function syncLanguageSettingsFromStorage() {
   await syncLanguageHeaderRulesFromStorage();
 }
 
-async function saveAndApplySiteScopeConfig(config) {
+async function saveAndApplySiteScopeConfig(config, reconcile = true) {
   const normalized = normalizeSiteScopeConfig(config);
+  SiteRules.compile(normalized);
   await chrome.storage.local.set({ [SITE_SCOPE_STORAGE_KEY]: normalized });
-  if (await getExtensionEnabled()) {
+  siteScopeConfigCache = normalized;
+  if (reconcile && await getExtensionEnabled()) {
     reconcileAllTabs(normalized, true).catch(error => {
       console.warn('Deferred site scope reconciliation failed:', error.message);
     });
   }
   return normalized;
+}
+
+function siteScopeView(config) {
+  return {
+    mode: config.mode,
+    domains: config.domains,
+    sources: config.sources.map(({ groups, ...source }) => ({
+      ...source,
+      count: groups.reduce((total, group) => total + group.rules.length, 0)
+    }))
+  };
+}
+
+async function downloadSiteRules(url, categories) {
+  const origin = new URL(url);
+  if (!['http:', 'https:'].includes(origin.protocol)) throw new Error('Use an HTTP or HTTPS subscription URL');
+  const downloads = new Map();
+  async function load(name, parent) {
+    const target = new URL(name, parent).href;
+    if (!downloads.has(target)) {
+      downloads.set(target, (async () => {
+        const response = await fetch(target, { cache: 'no-store', signal: AbortSignal.timeout(30000) });
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${target}`);
+        return { name: response.url || target, bytes: new Uint8Array(await response.arrayBuffer()) };
+      })());
+    }
+    return downloads.get(target);
+  }
+  const file = await load(origin.href, origin.href);
+  return SiteRules.parse(file.bytes, { name: file.name, categories, load });
+}
+
+async function addSiteRuleSource(source, form) {
+  const groups = source.url ? await downloadSiteRules(source.url, source.categories) : source.groups;
+  const config = await getSiteScopeConfig();
+  return saveAndApplySiteScopeConfig({
+    ...config,
+    domains: form.domains,
+    mode: 'custom',
+    sources: [...config.sources, {
+      id: crypto.randomUUID(),
+      name: source.name || new URL(source.url).pathname.split('/').pop() || new URL(source.url).hostname,
+      url: source.url || '', categories: source.categories || '',
+      groups, updatedAt: Date.now(), error: ''
+    }]
+  });
+}
+
+async function removeSiteRuleSource(id) {
+  const config = await getSiteScopeConfig();
+  return saveAndApplySiteScopeConfig({ ...config, sources: config.sources.filter(source => source.id !== id) });
+}
+
+let ruleSubscriptionRefreshTask = null;
+function refreshRuleSubscriptions() {
+  if (ruleSubscriptionRefreshTask) return ruleSubscriptionRefreshTask;
+  ruleSubscriptionRefreshTask = (async () => {
+    const config = await getSiteScopeConfig();
+    for (const subscription of config.sources.filter(source => source.url)) {
+      let groups, error = '';
+      try {
+        groups = await downloadSiteRules(subscription.url, subscription.categories);
+      } catch (failure) {
+        error = failure.message;
+      }
+      const current = await getSiteScopeConfig();
+      const source = current.sources.find(item => item.id === subscription.id);
+      if (!source) continue;
+      const changed = Boolean(groups) && JSON.stringify(groups) !== JSON.stringify(source.groups);
+      const updated = { ...source, error };
+      if (groups) Object.assign(updated, { groups, updatedAt: Date.now() });
+      await saveAndApplySiteScopeConfig({
+        ...current, sources: current.sources.map(item => item.id === source.id ? updated : item)
+      }, changed && current.mode === 'custom');
+    }
+    return getSiteScopeConfig();
+  })().finally(() => { ruleSubscriptionRefreshTask = null; });
+  return ruleSubscriptionRefreshTask;
+}
+
+async function ensureRuleSubscriptionAlarm() {
+  if (!await chrome.alarms.get(RULE_SUBSCRIPTION_ALARM)) {
+    await chrome.alarms.create(RULE_SUBSCRIPTION_ALARM, { periodInMinutes: 1440 });
+  }
 }
 
 async function getTimezoneConfig() {
@@ -1238,6 +1309,7 @@ async function setExtensionEnabled(enabled) {
 }
 
 function initializeExtension() {
+  ensureRuleSubscriptionAlarm();
   if (!extensionInitializationTask) {
     extensionInitializationTask = queueExtensionTransition(async () => {
       if (await getExtensionEnabled()) {
@@ -1367,6 +1439,11 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
     updateGeolocation();
   }
+  if (alarm.name === RULE_SUBSCRIPTION_ALARM) {
+    getExtensionEnabled().then(enabled => enabled && refreshRuleSubscriptions()).catch(error => {
+      console.warn('Rule subscription update failed:', error.message);
+    });
+  }
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -1421,15 +1498,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "getSiteScopeConfig") {
     (async () => {
       const config = await getSiteScopeConfig();
-      sendResponse({ status: "ok", config });
+      sendResponse({ status: "ok", config: siteScopeView(config) });
     })().catch(error => sendResponse({ status: "error", message: error.message }));
     return true;
   }
 
   if (request.action === "setSiteScopeConfig") {
     (async () => {
-      const config = await saveAndApplySiteScopeConfig(request.config || {});
-      sendResponse({ status: "ok", config });
+      const current = await getSiteScopeConfig();
+      const config = await saveAndApplySiteScopeConfig({ ...current, ...request.config, sources: current.sources });
+      sendResponse({ status: "ok", config: siteScopeView(config) });
+    })().catch(error => sendResponse({ status: "error", message: error.message }));
+    return true;
+  }
+
+  if (['addSiteRuleSource', 'removeSiteRuleSource', 'refreshSiteRuleSources'].includes(request.action)) {
+    (async () => {
+      const config = request.action === 'addSiteRuleSource'
+        ? await addSiteRuleSource(request.source, request.config)
+        : request.action === 'removeSiteRuleSource'
+          ? await removeSiteRuleSource(request.id)
+          : await refreshRuleSubscriptions();
+      sendResponse({ status: "ok", config: siteScopeView(config) });
     })().catch(error => sendResponse({ status: "error", message: error.message }));
     return true;
   }
